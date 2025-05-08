@@ -1,3 +1,4 @@
+console.log('=== Dodomove backend: démarrage du serveur ===');
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -104,6 +105,7 @@ app.post('/send-email', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
+console.log('=== Dodomove backend: juste avant listen, PORT =', PORT);
 app.listen(PORT, () => {
   console.log(`Serveur démarré sur le port ${PORT}`);
 }); 
