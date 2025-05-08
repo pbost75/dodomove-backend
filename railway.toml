@@ -3,7 +3,7 @@ builder = "nixpacks"
 buildCommand = "npm install"
 
 [deploy]
-startCommand = "node server-minimal.js"
+startCommand = "node server.js"
 healthcheckPath = "/"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
