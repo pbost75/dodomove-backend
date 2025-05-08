@@ -238,46 +238,69 @@ app.post('/send-email', async (req, res) => {
       console.log('AIRTABLE_API_KEY défini:', !!process.env.AIRTABLE_API_KEY);
       console.log('AIRTABLE_BASE_ID défini:', !!process.env.AIRTABLE_BASE_ID);
       
-      // Essayer d'abord avec le nom de table LeadMagnet - VolumeCalculator
+      // Utiliser l'ID direct de la table pour une meilleure robustesse
+      // appyuDiWXUzpy9DTT est l'ID de la base, tblEBCktaZB4BSKAJ est l'ID de la table
       try {
-        await base('LeadMagnet - VolumeCalculator').create([
+        // Créer les données dans Airtable avec l'ID direct de la table
+        await base('tblEBCktaZB4BSKAJ').create([
           {
             fields: {
+              // Identifier les noms de champs exacts dans Airtable
               'Email': email,
-              'Nom': name || '',
+              'Items': JSON.stringify(items),
               'TotalVolume': totalVolume,
-              'Date': new Date().toISOString(),
-              'MovingTimeline': movingTimelineText || '',
-              'Items': JSON.stringify(items)
+              'MovingTimeline': movingTimelineText || ''
             }
           }
         ]);
-        console.log('Données enregistrées dans Airtable (table LeadMagnet - VolumeCalculator) avec succès');
+        console.log('Données enregistrées dans Airtable avec succès (via ID de table)');
       } catch (error) {
-        console.error('Erreur avec la table LeadMagnet - VolumeCalculator:', error);
+        console.error('Erreur avec l\'ID de table:', error);
+        console.error('Détails de l\'erreur:', error.message);
         
-        // Si cela échoue, essayer avec l'ancien nom de table
+        // Si cela échoue, essayer avec le nom de la table
         try {
-          await base('Estimations').create([
+          await base('LeadMagnet - VolumeCalculator').create([
             {
               fields: {
                 'Email': email,
-                'Nom': name || '',
-                'Volume Total': totalVolume,
-                'Date': new Date().toISOString(),
-                'Période Déménagement': movingTimelineText || '',
-                'Détails': JSON.stringify(items)
+                'Items': JSON.stringify(items),
+                'TotalVolume': totalVolume,
+                'MovingTimeline': movingTimelineText || ''
               }
             }
           ]);
-          console.log('Données enregistrées dans Airtable (table Estimations) avec succès');
-        } catch (fallbackError) {
-          throw new Error(`Impossible d'enregistrer dans les tables: ${error.message} ET ${fallbackError.message}`);
+          console.log('Données enregistrées dans Airtable (via nom de table) avec succès');
+        } catch (tableNameError) {
+          console.error('Erreur avec le nom de table:', tableNameError);
+          
+          // Dernière tentative avec l'ancienne configuration
+          try {
+            await base('Estimations').create([
+              {
+                fields: {
+                  'Email': email,
+                  'Nom': name || '',
+                  'Volume Total': totalVolume,
+                  'Date': new Date().toISOString(),
+                  'Période Déménagement': movingTimelineText || '',
+                  'Détails': JSON.stringify(items)
+                }
+              }
+            ]);
+            console.log('Données enregistrées dans Airtable (via table Estimations) avec succès');
+          } catch (fallbackError) {
+            throw new Error(`Échecs multiples: ID direct (${error.message}), nom de table (${tableNameError.message}), et fallback (${fallbackError.message})`);
+          }
         }
       }
     } catch (airtableError) {
       // Ne pas échouer si Airtable échoue
-      console.error('Erreur Airtable (non bloquante):', airtableError);
+      console.error('Erreur Airtable complète (non bloquante):', airtableError);
+      // Log plus détaillé pour comprendre la structure de l'erreur
+      if (airtableError.error) {
+        console.error('Détails de l\'erreur Airtable:', JSON.stringify(airtableError.error));
+      }
     }
     
     // Répondre avec succès
