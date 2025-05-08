@@ -7,8 +7,19 @@ const Airtable = require('airtable');
 const app = express();
 
 // Configuration CORS
+const allowedOrigins = [
+  process.env.FRONTEND_URL, // domaine de production
+  "http://localhost:8080"  // pour le développement local
+].filter(Boolean); // retire undefined
+
 const corsOptions = {
-  origin: process.env.FRONTEND_URL,
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['POST'],
   credentials: true
 };
