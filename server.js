@@ -25,6 +25,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Gère les requêtes preflight CORS
 app.use(express.json());
 
 // Initialisation des clients
