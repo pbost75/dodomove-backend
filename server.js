@@ -13,23 +13,40 @@ console.log('FRONTEND_URL:', process.env.FRONTEND_URL);
 
 const express = require('express');
 const cors = require('cors');
+const http = require('http');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+// Railway recommande d'utiliser le port qu'ils fournissent
+const PORT = process.env.PORT || 8080;
 const host = '0.0.0.0';
 
-// Logging middleware
+// Logging middleware avec plus de détails
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - IP: ${req.ip}`);
+  res.on('finish', () => {
+    console.log(`${new Date().toISOString()} - Response: ${res.statusCode}`);
+  });
   next();
 });
 
-// CORS configuration simple
+// CORS configuration plus permissive
 app.use(cors({
   origin: '*',
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
+
+// Health route spécifique pour Railway (/) - recommandée pour les healthchecks
+app.get('/', (req, res) => {
+  console.log('GET / appelé (healthcheck)');
+  res.status(200).send('OK');
+});
+
+// Route healthcheck supplémentaire au chemin standard
+app.get('/_health', (req, res) => {
+  console.log('GET /_health appelé');
+  res.status(200).send('OK');
+});
 
 // Parse JSON bodies
 app.use(express.json());
@@ -63,11 +80,6 @@ app.get('/env', (req, res) => {
   });
 });
 
-// Endpoint simple pour tester l'application
-app.get('/', (req, res) => {
-  res.send('Bienvenue sur le backend de Dodomove!');
-});
-
 // Route de test complètement indépendante des variables d'environnement
 app.get('/test', (req, res) => {
   console.log('GET /test appelé');
@@ -88,13 +100,37 @@ app.get('/test', (req, res) => {
   res.status(200).json(testData);
 });
 
-// Démarrer le serveur
-app.listen(PORT, host, () => {
+// Simple API message route
+app.get('/api/message', (req, res) => {
+  console.log('GET /api/message appelé');
+  res.json({ message: "Hello from Express API!" });
+});
+
+// Création du serveur HTTP
+const server = http.createServer(app);
+
+// Démarrer le serveur avec plus de logs
+server.listen(PORT, host, () => {
   console.log(`Serveur démarré sur ${host}:${PORT}`);
   console.log('Routes disponibles:');
-  console.log('- GET /');
+  console.log('- GET / (healthcheck)');
+  console.log('- GET /_health');
   console.log('- GET /health');
   console.log('- GET /ping');
   console.log('- GET /env');
   console.log('- GET /test');
+  console.log('- GET /api/message');
+});
+
+// Gestion des erreurs
+server.on('error', (error) => {
+  console.error('Erreur du serveur:', error);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Exception non gérée:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Promesse rejetée non gérée:', reason);
 }); 
