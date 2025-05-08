@@ -46,11 +46,30 @@ const corsOptions = {
   },
   methods: ['POST', 'GET', 'OPTIONS'],
   credentials: true,
-  preflightContinue: true
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 };
 
+// Appliquer CORS globalement
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Gère les requêtes preflight CORS
+
+// Gestionnaire explicite pour les requêtes OPTIONS
+app.options('*', (req, res) => {
+  console.log('Requête OPTIONS reçue:', {
+    path: req.path,
+    headers: req.headers
+  });
+  res.status(204).end();
+});
+
+// Middleware pour les en-têtes CORS supplémentaires
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  next();
+});
+
 app.use(express.json());
 
 // Initialisation des clients
