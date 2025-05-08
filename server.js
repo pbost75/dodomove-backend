@@ -176,7 +176,7 @@ app.post('/send-email', async (req, res) => {
     // Envoyer l'email via Resend
     console.log('Envoi de l\'email via Resend...');
     const { data, error } = await resend.emails.send({
-      from: 'DodoMove Estimations <pierre.bost.pro@resend.dev>',
+      from: 'Dodomove <pierre.bost.pro@resend.dev>',
       to: [email],
       subject: 'Estimation de votre volume de déménagement 📦',
       html: `
@@ -184,7 +184,7 @@ app.post('/send-email', async (req, res) => {
         <!-- En-tête avec logo et image -->
         <div style="background-color: #4285F4; padding: 20px; text-align: center;">
           <h1 style="color: white; margin: 0; font-size: 24px;">Dodomove</h1>
-          <div style="background-image: url('https://images.unsplash.com/photo-1600607686527-6fb886090705?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NXx8bW92aW5nJTIwdHJ1Y2t8ZW58MHx8MHx8fDA%3D&auto=format&fit=crop&w=600&q=60'); height: 120px; background-position: center; background-size: cover; margin-top: 15px; border-radius: 5px;"></div>
+          <div style="background-image: url('https://images.unsplash.com/photo-1600125693227-cfb4762db1d0?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8bW92aW5nJTIwaG91c2V8ZW58MHx8MHx8fDA%3D&auto=format&fit=crop&w=800&q=60'); height: 120px; background-position: center; background-size: cover; margin-top: 15px; border-radius: 5px;"></div>
         </div>
         
         <!-- Contenu principal -->
