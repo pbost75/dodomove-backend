@@ -38,6 +38,10 @@ app.use(express.json());
 
 // Initialisation des clients
 console.log('Initialisation Resend et Airtable');
+console.log('AIRTABLE_API_KEY:', process.env.AIRTABLE_API_KEY);
+console.log('AIRTABLE_BASE_ID:', process.env.AIRTABLE_BASE_ID);
+console.log('RESEND_API_KEY:', process.env.RESEND_API_KEY);
+console.log('FRONTEND_URL:', process.env.FRONTEND_URL);
 const resend = new Resend(process.env.RESEND_API_KEY);
 const base = new Airtable({apiKey: process.env.AIRTABLE_API_KEY})
   .base(process.env.AIRTABLE_BASE_ID);
