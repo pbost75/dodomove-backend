@@ -21,6 +21,12 @@ app.get('/ping', (req, res) => {
   res.send('pong');
 });
 
+// Route de santé (health check) pour Railway
+app.get('/health', (req, res) => {
+  console.log('GET /health appelé');
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Configuration CORS
 const allowedOrigins = [
   process.env.FRONTEND_URL, // domaine de production
@@ -195,7 +201,27 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3001;
+const host = '0.0.0.0'; // S'assurer que le serveur écoute sur toutes les interfaces
+
 console.log('=== Dodomove backend: juste avant listen, PORT =', PORT);
-app.listen(PORT, () => {
-  console.log(`Serveur démarré sur le port ${PORT}`);
+console.log('=== Dodomove backend: environnement =', process.env.NODE_ENV || 'development');
+console.log('=== Dodomove backend: interface d\'écoute =', host);
+
+const server = app.listen(PORT, host, () => {
+  console.log(`Serveur démarré sur ${host}:${PORT}`);
+  console.log('=== Routes disponibles ===');
+  app._router.stack
+    .filter(r => r.route)
+    .forEach(r => {
+      Object.keys(r.route.methods).forEach(method => {
+        if (r.route.methods[method]) {
+          console.log(`${method.toUpperCase()} ${r.route.path}`);
+        }
+      });
+    });
+}); 
+
+// Gestion des erreurs au niveau du serveur
+server.on('error', (error) => {
+  console.error('Erreur au démarrage du serveur:', error);
 }); 
