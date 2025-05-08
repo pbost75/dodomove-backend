@@ -163,7 +163,6 @@ app.post('/send-email', async (req, res) => {
 
     console.log('Données validées, création du tableau HTML...');
     const itemsHTML = generateItemsHTML(items);
-    const contactName = name || 'client';
     
     // Préparer la période de déménagement si disponible
     let timelineHTML = '';
@@ -179,34 +178,47 @@ app.post('/send-email', async (req, res) => {
     const { data, error } = await resend.emails.send({
       from: 'DodoMove Estimations <pierre.bost.pro@resend.dev>',
       to: [email],
-      subject: 'Votre estimation de volume de déménagement',
+      subject: 'Estimation de votre volume de déménagement 📦',
       html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="text-align: center; padding: 20px 0;">
-          <h1 style="color: #4285F4;">Estimation de volume DodoMove</h1>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 5px; overflow: hidden;">
+        <!-- En-tête avec logo et image -->
+        <div style="background-color: #4285F4; padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 24px;">Dodomove</h1>
+          <div style="background-image: url('https://images.unsplash.com/photo-1600607686527-6fb886090705?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NXx8bW92aW5nJTIwdHJ1Y2t8ZW58MHx8MHx8fDA%3D&auto=format&fit=crop&w=600&q=60'); height: 120px; background-position: center; background-size: cover; margin-top: 15px; border-radius: 5px;"></div>
         </div>
         
-        <div style="padding: 20px; background-color: white; border-radius: 5px;">
-          <p>Bonjour ${contactName},</p>
+        <!-- Contenu principal -->
+        <div style="padding: 20px; background-color: white;">
+          <h2 style="color: #333; font-size: 22px;">Estimation de votre <span style="color: #4CAF50;">volume de déménagement</span> 📦</h2>
           
-          <p>Voici l'estimation de volume pour votre déménagement :</p>
+          <p>Bonjour${name ? ' ' + name : ''},</p>
           
-          ${timelineHTML}
+          <p>Prêts à découvrir le volume de votre déménagement ? Conformément à ce que vous avez saisi dans le calculateur, <strong>nous estimons le volume de déménagement à ${totalVolume.toFixed(2)} m³</strong>${totalVolume > 0 ? ' / ' + Math.ceil(totalVolume * 35.315) + ' ft³' : ''}.</p>
           
-          <h2 style="color: #4285F4; margin-top: 20px;">Détails des objets</h2>
+          ${movingTimelineText ? `<p><strong>Période prévue:</strong> ${movingTimelineText}</p>` : ''}
+          
+          <p style="background-color: #f8f9fa; padding: 10px; border-left: 4px solid #4285F4; font-style: italic;"><strong>Attention :</strong> Ce calculateur ne vous fournit <strong>qu'une simple estimation</strong>. Le calculateur de volume a pour but de vous aider à estimer vos frais de déménagement, le nombre de cartons de déménagement dont vous aurez besoin ainsi que la taille du camion de déménagement nécessaire pour votre déménagement.</p>
+          
+          <p><strong>Vous souhaitez faire des économies sur votre déménagement ?</strong> Nous sommes là pour vous aider.</p>
+          
+          <a href="https://dodomove.fr" style="display: inline-block; background-color: #4285F4; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; margin: 15px 0;">Demandez jusqu'à 5 devis →</a>
+          
+          <p>Vous trouverez ci-dessous la liste des biens que vous planifiez de déménager :</p>
+          
           ${itemsHTML}
           
-          <div style="background-color: #4285F4; color: white; padding: 15px; border-radius: 5px; text-align: center; margin-top: 20px;">
-            <h3 style="margin: 0;">Volume total estimé: ${totalVolume.toFixed(2)} m³</h3>
+          <div style="background-color: #4CAF50; color: white; padding: 15px; border-radius: 5px; text-align: center; margin: 20px 0;">
+            <h3 style="margin: 0; font-size: 18px;">Volume total estimé: ${totalVolume.toFixed(2)} m³${totalVolume > 0 ? ' / ' + Math.ceil(totalVolume * 35.315) + ' ft³' : ''}</h3>
           </div>
           
-          <p style="margin-top: 30px;">Cette estimation vous permettra de mieux organiser votre déménagement et de demander des devis adaptés auprès des entreprises de déménagement.</p>
+          <p>Bonne chance pour votre déménagement 🍀</p>
           
-          <p>Bien cordialement,<br>L'équipe DodoMove</p>
+          <p>L'équipe Dodomove</p>
         </div>
         
-        <div style="text-align: center; padding: 20px 0; color: #666; font-size: 12px;">
-          <p>© 2024 DodoMove - Estimateur de volume de déménagement</p>
+        <!-- Pied de page -->
+        <div style="text-align: center; padding: 15px; background-color: #f8f9fa; color: #666; font-size: 12px; border-top: 1px solid #e0e0e0;">
+          <p>© 2024 Dodomove - Estimateur de volume de déménagement</p>
         </div>
       </div>
       `,
