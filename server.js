@@ -7,6 +7,12 @@ const Airtable = require('airtable');
 
 const app = express();
 
+// Route de debug
+app.get('/ping', (req, res) => {
+  console.log('GET /ping appelé');
+  res.send('pong');
+});
+
 // Configuration CORS
 const allowedOrigins = [
   process.env.FRONTEND_URL, // domaine de production
@@ -15,6 +21,7 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: (origin, callback) => {
+    console.log('CORS origin:', origin);
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -30,15 +37,17 @@ app.options('*', cors(corsOptions)); // Gère les requêtes preflight CORS
 app.use(express.json());
 
 // Initialisation des clients
+console.log('Initialisation Resend et Airtable');
 const resend = new Resend(process.env.RESEND_API_KEY);
 const base = new Airtable({apiKey: process.env.AIRTABLE_API_KEY})
   .base(process.env.AIRTABLE_BASE_ID);
 
 // Endpoint pour Airtable
 app.post('/submit-airtable', async (req, res) => {
+  console.log('POST /submit-airtable appelé');
   try {
     const { email, items, totalVolume, movingTimelineText } = req.body;
-    
+    console.log('Données reçues:', req.body);
     const record = await base('tblEBCktaZB4BSKAJ').create([{
       fields: {
         Email: email,
@@ -47,7 +56,7 @@ app.post('/submit-airtable', async (req, res) => {
         MovingTimelineText: movingTimelineText
       }
     }]);
-
+    console.log('Airtable record créé:', record);
     res.status(200).json({ success: true, record });
   } catch (error) {
     console.error('Erreur Airtable:', error);
@@ -57,9 +66,10 @@ app.post('/submit-airtable', async (req, res) => {
 
 // Endpoint pour l'envoi d'email
 app.post('/send-email', async (req, res) => {
+  console.log('POST /send-email appelé');
   try {
     const { email, items, totalVolume } = req.body;
-    
+    console.log('Données reçues:', req.body);
     // Création du tableau HTML pour l'email
     const itemsTable = `
       <table style="width:100%; border-collapse: collapse; margin-bottom: 20px;">
@@ -81,7 +91,6 @@ app.post('/send-email', async (req, res) => {
         </tbody>
       </table>
     `;
-
     await resend.emails.send({
       from: "Dodomove <onboarding@resend.dev>",
       to: email,
@@ -96,12 +105,18 @@ app.post('/send-email', async (req, res) => {
         </div>
       `
     });
-
+    console.log('Email envoyé via Resend');
     res.status(200).json({ success: true });
   } catch (error) {
     console.error('Erreur Resend:', error);
     res.status(500).json({ success: false, error: error.message });
   }
+});
+
+// Middleware de gestion d'erreur global
+app.use((err, req, res, next) => {
+  console.error('Erreur Express globale:', err);
+  res.status(500).send('Erreur serveur');
 });
 
 const PORT = process.env.PORT || 3001;
