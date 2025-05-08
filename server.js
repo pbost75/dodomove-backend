@@ -235,19 +235,46 @@ app.post('/send-email', async (req, res) => {
     // Enregistrer les données dans Airtable
     try {
       console.log('Enregistrement des données dans Airtable...');
-      await base('Estimations').create([
-        {
-          fields: {
-            'Email': email,
-            'Nom': name || '',
-            'Volume Total': totalVolume,
-            'Date': new Date().toISOString(),
-            'Période Déménagement': movingTimelineText || '',
-            'Détails': JSON.stringify(items)
+      console.log('AIRTABLE_API_KEY défini:', !!process.env.AIRTABLE_API_KEY);
+      console.log('AIRTABLE_BASE_ID défini:', !!process.env.AIRTABLE_BASE_ID);
+      
+      // Essayer d'abord avec le nom de table LeadMagnet - VolumeCalculator
+      try {
+        await base('LeadMagnet - VolumeCalculator').create([
+          {
+            fields: {
+              'Email': email,
+              'Nom': name || '',
+              'TotalVolume': totalVolume,
+              'Date': new Date().toISOString(),
+              'MovingTimeline': movingTimelineText || '',
+              'Items': JSON.stringify(items)
+            }
           }
+        ]);
+        console.log('Données enregistrées dans Airtable (table LeadMagnet - VolumeCalculator) avec succès');
+      } catch (error) {
+        console.error('Erreur avec la table LeadMagnet - VolumeCalculator:', error);
+        
+        // Si cela échoue, essayer avec l'ancien nom de table
+        try {
+          await base('Estimations').create([
+            {
+              fields: {
+                'Email': email,
+                'Nom': name || '',
+                'Volume Total': totalVolume,
+                'Date': new Date().toISOString(),
+                'Période Déménagement': movingTimelineText || '',
+                'Détails': JSON.stringify(items)
+              }
+            }
+          ]);
+          console.log('Données enregistrées dans Airtable (table Estimations) avec succès');
+        } catch (fallbackError) {
+          throw new Error(`Impossible d'enregistrer dans les tables: ${error.message} ET ${fallbackError.message}`);
         }
-      ]);
-      console.log('Données enregistrées dans Airtable avec succès');
+      }
     } catch (airtableError) {
       // Ne pas échouer si Airtable échoue
       console.error('Erreur Airtable (non bloquante):', airtableError);
