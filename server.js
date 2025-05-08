@@ -7,6 +7,14 @@ const Airtable = require('airtable');
 
 const app = express();
 
+// Configuration des timeouts
+app.use((req, res, next) => {
+  // Augmente le timeout à 120 secondes
+  req.setTimeout(120000);
+  res.setTimeout(120000);
+  next();
+});
+
 // Route de debug
 app.get('/ping', (req, res) => {
   console.log('GET /ping appelé');
@@ -82,9 +90,23 @@ app.post('/send-email', async (req, res) => {
   console.log('=== POST /send-email appelé ===');
   console.log('Headers reçus:', req.headers);
   console.log('Body reçu:', req.body);
+  
+  // Définir un timeout pour la requête
+  const timeout = setTimeout(() => {
+    console.error('Timeout atteint pour /send-email');
+    if (!res.headersSent) {
+      res.status(504).json({
+        success: false,
+        error: 'Timeout lors de l\'envoi de l\'email'
+      });
+    }
+  }, 30000); // 30 secondes de timeout
+
   try {
     const { email, items, totalVolume } = req.body;
+    
     if (!email || !items || totalVolume === undefined) {
+      clearTimeout(timeout);
       console.error('Données manquantes:', { email, items, totalVolume });
       return res.status(400).json({ 
         success: false, 
@@ -92,6 +114,7 @@ app.post('/send-email', async (req, res) => {
         received: { email, items, totalVolume }
       });
     }
+
     console.log('Données validées, création du tableau HTML...');
     // Création du tableau HTML pour l'email
     const itemsTable = `
@@ -114,7 +137,9 @@ app.post('/send-email', async (req, res) => {
         </tbody>
       </table>
     `;
-    await resend.emails.send({
+    
+    console.log('Envoi de l\'email via Resend...');
+    const emailResult = await resend.emails.send({
       from: "Dodomove <onboarding@resend.dev>",
       to: email,
       subject: "Estimation de votre volume de déménagement",
@@ -128,11 +153,19 @@ app.post('/send-email', async (req, res) => {
         </div>
       `
     });
-    console.log('Email envoyé via Resend');
-    res.status(200).json({ success: true });
+    
+    console.log('Email envoyé avec succès:', emailResult);
+    clearTimeout(timeout);
+    res.status(200).json({ success: true, emailResult });
+    
   } catch (error) {
-    console.error('Erreur Resend:', error);
-    res.status(500).json({ success: false, error: error.message });
+    clearTimeout(timeout);
+    console.error('Erreur détaillée Resend:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      details: error.response ? error.response.data : null
+    });
   }
 });
 
