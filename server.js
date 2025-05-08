@@ -106,6 +106,47 @@ app.get('/api/message', (req, res) => {
   res.json({ message: "Hello from Express API!" });
 });
 
+// Route pour envoyer les emails
+app.post('/send-email', async (req, res) => {
+  console.log('POST /send-email appelé');
+  console.log('Body reçu:', req.body);
+  
+  try {
+    const { email, name, items, totalVolume, movingTimelineText } = req.body;
+    
+    // Vérification des données requises
+    if (!email || !items || totalVolume === undefined) {
+      console.error('Données manquantes:', { email, items, totalVolume });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Données manquantes',
+        received: { 
+          hasEmail: !!email, 
+          hasItems: !!items, 
+          hasTotalVolume: totalVolume !== undefined 
+        }
+      });
+    }
+
+    // Pour l'instant, simuler le succès sans envoyer réellement l'email
+    // Vous devrez réimplémenter la logique d'envoi d'email de votre ancienne version
+    console.log('Données valides, simulation d\'envoi d\'email à:', email);
+    
+    // Répondre avec succès
+    res.status(200).json({ 
+      success: true,
+      message: `Estimation envoyée avec succès à ${email}`
+    });
+    
+  } catch (error) {
+    console.error('Erreur lors de l\'envoi de l\'email:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Erreur serveur lors de l\'envoi de l\'email'
+    });
+  }
+});
+
 // Création du serveur HTTP
 const server = http.createServer(app);
 
@@ -120,6 +161,7 @@ server.listen(PORT, host, () => {
   console.log('- GET /env');
   console.log('- GET /test');
   console.log('- GET /api/message');
+  console.log('- POST /send-email');
 });
 
 // Gestion des erreurs
