@@ -68,6 +68,26 @@ app.get('/', (req, res) => {
   res.send('Bienvenue sur le backend de Dodomove!');
 });
 
+// Route de test complètement indépendante des variables d'environnement
+app.get('/test', (req, res) => {
+  console.log('GET /test appelé');
+  
+  // Générer un objet de test simple
+  const testData = {
+    message: "Cette route est indépendante des variables d'environnement",
+    timestamp: new Date().toISOString(),
+    random: Math.random(),
+    serverInfo: {
+      platform: process.platform,
+      nodeVersion: process.version,
+      uptime: process.uptime()
+    }
+  };
+  
+  // Répondre avec les données de test
+  res.status(200).json(testData);
+});
+
 // Démarrer le serveur
 app.listen(PORT, host, () => {
   console.log(`Serveur démarré sur ${host}:${PORT}`);
@@ -76,4 +96,5 @@ app.listen(PORT, host, () => {
   console.log('- GET /health');
   console.log('- GET /ping');
   console.log('- GET /env');
+  console.log('- GET /test');
 }); 
