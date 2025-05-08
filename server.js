@@ -1,6 +1,10 @@
 console.log('=== Dodomove backend: démarrage du serveur ===');
 require('dotenv').config();
 
+// Import des modules pour l'envoi d'emails et Airtable
+const { Resend } = require('resend');
+const Airtable = require('airtable');
+
 // Log toutes les variables d'environnement au démarrage
 console.log('=== Variables d\'environnement ===');
 console.log('NODE_ENV:', process.env.NODE_ENV);
@@ -106,6 +110,35 @@ app.get('/api/message', (req, res) => {
   res.json({ message: "Hello from Express API!" });
 });
 
+// Configuration de Resend pour l'envoi d'emails
+const resend = new Resend(process.env.RESEND_API_KEY);
+console.log('Resend configuré:', !!process.env.RESEND_API_KEY);
+
+// Configuration d'Airtable
+Airtable.configure({
+  apiKey: process.env.AIRTABLE_API_KEY,
+});
+const base = Airtable.base(process.env.AIRTABLE_BASE_ID);
+console.log('Airtable configuré:', !!process.env.AIRTABLE_API_KEY && !!process.env.AIRTABLE_BASE_ID);
+
+// Fonction utilitaire pour générer le HTML des items
+function generateItemsHTML(items) {
+  let html = '<table style="width:100%; border-collapse: collapse; margin-bottom: 20px;">';
+  html += '<tr style="background-color: #f8f9fa;"><th style="padding: 10px; text-align: left; border: 1px solid #dee2e6;">Objet</th><th style="padding: 10px; text-align: center; border: 1px solid #dee2e6;">Quantité</th><th style="padding: 10px; text-align: right; border: 1px solid #dee2e6;">Volume</th></tr>';
+  
+  items.forEach(item => {
+    const totalItemVolume = item.volume * item.quantity;
+    html += `<tr>
+      <td style="padding: 10px; border: 1px solid #dee2e6;">${item.name}</td>
+      <td style="padding: 10px; text-align: center; border: 1px solid #dee2e6;">${item.quantity}</td>
+      <td style="padding: 10px; text-align: right; border: 1px solid #dee2e6;">${totalItemVolume.toFixed(2)} m³</td>
+    </tr>`;
+  });
+  
+  html += '</table>';
+  return html;
+}
+
 // Route pour envoyer les emails
 app.post('/send-email', async (req, res) => {
   console.log('POST /send-email appelé');
@@ -128,21 +161,101 @@ app.post('/send-email', async (req, res) => {
       });
     }
 
-    // Pour l'instant, simuler le succès sans envoyer réellement l'email
-    // Vous devrez réimplémenter la logique d'envoi d'email de votre ancienne version
-    console.log('Données valides, simulation d\'envoi d\'email à:', email);
+    console.log('Données validées, création du tableau HTML...');
+    const itemsHTML = generateItemsHTML(items);
+    const contactName = name || 'client';
+    
+    // Préparer la période de déménagement si disponible
+    let timelineHTML = '';
+    if (movingTimelineText) {
+      timelineHTML = `
+      <div style="margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;">
+        <p style="margin-top: 0;"><strong>Période de déménagement :</strong> ${movingTimelineText}</p>
+      </div>`;
+    }
+    
+    // Envoyer l'email via Resend
+    console.log('Envoi de l\'email via Resend...');
+    const { data, error } = await resend.emails.send({
+      from: 'DodoMove Estimations <pierre.bost.pro@resend.dev>',
+      to: [email],
+      subject: 'Votre estimation de volume de déménagement',
+      html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="text-align: center; padding: 20px 0;">
+          <h1 style="color: #4285F4;">Estimation de volume DodoMove</h1>
+        </div>
+        
+        <div style="padding: 20px; background-color: white; border-radius: 5px;">
+          <p>Bonjour ${contactName},</p>
+          
+          <p>Voici l'estimation de volume pour votre déménagement :</p>
+          
+          ${timelineHTML}
+          
+          <h2 style="color: #4285F4; margin-top: 20px;">Détails des objets</h2>
+          ${itemsHTML}
+          
+          <div style="background-color: #4285F4; color: white; padding: 15px; border-radius: 5px; text-align: center; margin-top: 20px;">
+            <h3 style="margin: 0;">Volume total estimé: ${totalVolume.toFixed(2)} m³</h3>
+          </div>
+          
+          <p style="margin-top: 30px;">Cette estimation vous permettra de mieux organiser votre déménagement et de demander des devis adaptés auprès des entreprises de déménagement.</p>
+          
+          <p>Bien cordialement,<br>L'équipe DodoMove</p>
+        </div>
+        
+        <div style="text-align: center; padding: 20px 0; color: #666; font-size: 12px;">
+          <p>© 2024 DodoMove - Estimateur de volume de déménagement</p>
+        </div>
+      </div>
+      `,
+    });
+    
+    if (error) {
+      console.error('Erreur Resend:', error);
+      return res.status(500).json({ 
+        success: false, 
+        error: `Erreur lors de l'envoi de l'email: ${error.message}` 
+      });
+    }
+    
+    console.log('Email envoyé avec succès, ID:', data.id);
+    
+    // Enregistrer les données dans Airtable
+    try {
+      console.log('Enregistrement des données dans Airtable...');
+      await base('Estimations').create([
+        {
+          fields: {
+            'Email': email,
+            'Nom': name || '',
+            'Volume Total': totalVolume,
+            'Date': new Date().toISOString(),
+            'Période Déménagement': movingTimelineText || '',
+            'Détails': JSON.stringify(items)
+          }
+        }
+      ]);
+      console.log('Données enregistrées dans Airtable avec succès');
+    } catch (airtableError) {
+      // Ne pas échouer si Airtable échoue
+      console.error('Erreur Airtable (non bloquante):', airtableError);
+    }
     
     // Répondre avec succès
     res.status(200).json({ 
       success: true,
-      message: `Estimation envoyée avec succès à ${email}`
+      message: `Estimation envoyée avec succès à ${email}`,
+      emailId: data.id
     });
     
   } catch (error) {
     console.error('Erreur lors de l\'envoi de l\'email:', error);
     res.status(500).json({ 
       success: false, 
-      error: 'Erreur serveur lors de l\'envoi de l\'email'
+      error: 'Erreur serveur lors de l\'envoi de l\'email',
+      details: error.message
     });
   }
 });
