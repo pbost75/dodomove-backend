@@ -21,15 +21,24 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: (origin, callback) => {
-    console.log('CORS origin:', origin);
+    console.log('CORS origin reçu:', origin);
+    console.log('Origins autorisés:', allowedOrigins);
+    // En développement, on accepte toutes les origines
+    if (process.env.NODE_ENV !== 'production') {
+      callback(null, true);
+      return;
+    }
+    // En production, on vérifie l'origine
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.log('Origine refusée:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
   methods: ['POST', 'GET', 'OPTIONS'],
-  credentials: true
+  credentials: true,
+  preflightContinue: true
 };
 
 app.use(cors(corsOptions));
@@ -70,10 +79,20 @@ app.post('/submit-airtable', async (req, res) => {
 
 // Endpoint pour l'envoi d'email
 app.post('/send-email', async (req, res) => {
-  console.log('POST /send-email appelé');
+  console.log('=== POST /send-email appelé ===');
+  console.log('Headers reçus:', req.headers);
+  console.log('Body reçu:', req.body);
   try {
     const { email, items, totalVolume } = req.body;
-    console.log('Données reçues:', req.body);
+    if (!email || !items || totalVolume === undefined) {
+      console.error('Données manquantes:', { email, items, totalVolume });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Données manquantes',
+        received: { email, items, totalVolume }
+      });
+    }
+    console.log('Données validées, création du tableau HTML...');
     // Création du tableau HTML pour l'email
     const itemsTable = `
       <table style="width:100%; border-collapse: collapse; margin-bottom: 20px;">
