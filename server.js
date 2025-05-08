@@ -1,5 +1,16 @@
 console.log('=== Dodomove backend: démarrage du serveur ===');
 require('dotenv').config();
+
+// Log toutes les variables d'environnement au démarrage
+console.log('=== Variables d\'environnement ===');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('PORT:', process.env.PORT);
+// Masquer les valeurs sensibles mais vérifier si elles existent
+console.log('AIRTABLE_API_KEY existe:', !!process.env.AIRTABLE_API_KEY);
+console.log('AIRTABLE_BASE_ID existe:', !!process.env.AIRTABLE_BASE_ID);
+console.log('RESEND_API_KEY existe:', !!process.env.RESEND_API_KEY);
+console.log('FRONTEND_URL:', process.env.FRONTEND_URL);
+
 const express = require('express');
 const cors = require('cors');
 
@@ -39,6 +50,19 @@ app.get('/ping', (req, res) => {
   res.send('pong');
 });
 
+// Route pour afficher les variables d'environnement (valeurs masquées pour la sécurité)
+app.get('/env', (req, res) => {
+  console.log('GET /env appelé');
+  res.status(200).json({
+    NODE_ENV: process.env.NODE_ENV || 'non défini',
+    PORT: process.env.PORT || 'non défini',
+    AIRTABLE_API_KEY: process.env.AIRTABLE_API_KEY ? '[DÉFINI]' : 'non défini',
+    AIRTABLE_BASE_ID: process.env.AIRTABLE_BASE_ID ? '[DÉFINI]' : 'non défini',
+    RESEND_API_KEY: process.env.RESEND_API_KEY ? '[DÉFINI]' : 'non défini',
+    FRONTEND_URL: process.env.FRONTEND_URL || 'non défini'
+  });
+});
+
 // Endpoint simple pour tester l'application
 app.get('/', (req, res) => {
   res.send('Bienvenue sur le backend de Dodomove!');
@@ -51,4 +75,5 @@ app.listen(PORT, host, () => {
   console.log('- GET /');
   console.log('- GET /health');
   console.log('- GET /ping');
+  console.log('- GET /env');
 }); 
