@@ -184,7 +184,7 @@ app.post('/send-email', async (req, res) => {
         <!-- En-tête avec logo et image -->
         <div style="background-color: #4285F4; padding: 20px; text-align: center;">
           <h1 style="color: white; margin: 0; font-size: 24px;">Dodomove</h1>
-          <div style="background-image: url('https://images.unsplash.com/photo-1600125693227-cfb4762db1d0?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8bW92aW5nJTIwaG91c2V8ZW58MHx8MHx8fDA%3D&auto=format&fit=crop&w=800&q=60'); height: 120px; background-position: center; background-size: cover; margin-top: 15px; border-radius: 5px;"></div>
+          <div style="background-image: url('https://volume.dodomove.fr/images/dodomove-header.jpg'); height: 120px; background-position: center; background-size: cover; margin-top: 15px; border-radius: 5px;"></div>
         </div>
         
         <!-- Contenu principal -->
@@ -199,7 +199,23 @@ app.post('/send-email', async (req, res) => {
           
           <p><strong>Vous souhaitez faire des économies sur votre déménagement ?</strong> Nous sommes là pour vous aider.</p>
           
-          <a href="https://dodomove.fr" style="display: inline-block; background-color: #4285F4; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; margin: 15px 0;">Demandez jusqu'à 5 devis →</a>
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="https://dodomove.fr" style="display: inline-block; background-color: #f47d6c; color: white; padding: 15px 25px; text-decoration: none; border-radius: 30px; font-weight: 500; font-size: 16px;">
+              <span style="margin-right: 10px;">Demandez jusqu'à 5 devis</span>
+              <span style="font-weight: bold;">→</span>
+            </a>
+            <div style="margin-top: 10px; color: #333; font-size: 14px; display: flex; align-items: center; justify-content: center;">
+              <span style="display: inline-flex; align-items: center;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 5px;">
+                  <path d="M3 3h12v10H3z"></path>
+                  <path d="M15 6h3a3 3 0 0 1 3 3v4h-6"></path>
+                  <path d="M6 16a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path>
+                  <path d="M18 16a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path>
+                </svg>
+                en 2 minutes
+              </span>
+            </div>
+          </div>
           
           <p>Vous trouverez ci-dessous la liste des biens que vous planifiez de déménager :</p>
           
