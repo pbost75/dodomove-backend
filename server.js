@@ -683,6 +683,23 @@ app.post('/submit-funnel', async (req, res) => {
           console.log(`Champ: "${key}" = ${fields[key]}`);
         });
         
+        // Vérifier les champs de méthode pour éviter les problèmes avec les champs à sélection unique
+        if (pickupMethod && !['home', 'port'].includes(pickupMethod)) {
+          console.log(`⚠️ Valeur de pickup_method non reconnue: ${pickupMethod}, utilisation de 'home' par défaut`);
+          pickupMethod = 'home';
+        }
+        
+        if (deliveryMethod && !['home', 'port'].includes(deliveryMethod)) {
+          console.log(`⚠️ Valeur de delivery_method non reconnue: ${deliveryMethod}, utilisation de 'home' par défaut`);
+          deliveryMethod = 'home';
+        }
+        
+        // Vérifier les autres champs de type enum
+        if (shippingReason && !['moving', 'purchase', ''].includes(shippingReason)) {
+          console.log(`⚠️ Valeur de shipping_reason non reconnue: ${shippingReason}, utilisation de '' par défaut`);
+          shippingReason = '';
+        }
+        
         // Avec le test simplifié réussi, on peut maintenant envoyer les données complètes
         try {
           const completeRecord = await base(demandesTableId).create([
@@ -727,19 +744,22 @@ app.post('/submit-funnel', async (req, res) => {
                   
                   // Préparer les champs du véhicule à enregistrer
                   const vehicleFields = {
-                    "status": "New",
+                    // Utiliser une valeur connue pour le champ status (enlever le risque de valeur non autorisée)
                     "quote_id": quoteId,
-                    "type": vehicle.type || '',
-                    "registration": '', // Champ optionnel non fourni actuellement
+                    "type": vehicle.type || 'other', // Utiliser 'other' comme fallback
                     "brand": vehicle.brand || '',
                     "model": vehicle.model || '',
                     "value": parseFloat(vehicle.value) || 0,
                     "year": '', // Champ optionnel non fourni actuellement
                     "length": dimensions[0] || '', // Optionnel - première dimension si disponible
                     "width": dimensions[1] || '',  // Optionnel - deuxième dimension si disponible
-                    "height": dimensions[2] || '', // Optionnel - troisième dimension si disponible
-                    "weight": ''  // Champ optionnel non fourni actuellement
+                    "height": dimensions[2] || '' // Optionnel - troisième dimension si disponible
                   };
+                  
+                  // Vérifier si le type fourni est un type valide dans nos options
+                  if (!['car', 'motorcycle', 'scooter', 'quad', 'boat', 'other'].includes(vehicleFields.type)) {
+                    vehicleFields.type = 'other'; // Fallback sur "other" si le type n'est pas reconnu
+                  }
                   
                   console.log(`Tentative d'enregistrement du véhicule ${vehicle.brand} ${vehicle.model}`);
                   console.log('Champs du véhicule:', JSON.stringify(vehicleFields));
@@ -759,9 +779,8 @@ app.post('/submit-funnel', async (req, res) => {
                     await base(vehiclesTableId).create([
                       {
                         fields: {
-                          "status": "New",
                           "quote_id": quoteId,
-                          "type": vehicle.type || '',
+                          "type": ['car', 'motorcycle', 'scooter', 'quad', 'boat', 'other'].includes(vehicle.type) ? vehicle.type : 'other',
                           "brand": vehicle.brand || '',
                           "model": vehicle.model || ''
                         }
