@@ -697,6 +697,7 @@ app.post('/submit-funnel', async (req, res) => {
           // Si des véhicules sont présents, les enregistrer dans la table véhicules avec son ID spécifique
           if (vehicleDetails && vehicleDetails.length > 0) {
             console.log(`Enregistrement de ${vehicleDetails.length} véhicules dans Airtable...`);
+            console.log('Structure vehicleDetails:', JSON.stringify(vehicleDetails));
             
             const typeMap = {
               'car': 'Car',
@@ -710,7 +711,10 @@ app.post('/submit-funnel', async (req, res) => {
             const vehiclesTableId = 'tblVffkJ0XQx5wB9L'; // ID spécifique pour les véhicules
             
             // Vérifier si nous avons un ID de demande valide pour la relation
+            console.log('Structure completeRecord:', JSON.stringify(completeRecord));
             const quoteId = completeRecord && completeRecord[0] && completeRecord[0].id ? [completeRecord[0].id] : null;
+            console.log('quoteId extrait:', quoteId);
+            
             if (!quoteId) {
               console.warn("⚠️ Impossible de créer des véhicules sans ID de demande valide pour la relation");
             } else {
@@ -718,24 +722,31 @@ app.post('/submit-funnel', async (req, res) => {
               for (const vehicle of vehicleDetails) {
                 try {
                   // Format des dimensions du véhicule si disponible
-                  const dimensions = vehicle.size ? vehicle.size.split('x').map(dim => dim.trim()) : [];
+                  const dimensions = vehicle.size ? vehicle.size.split('×').map(dim => dim.trim()) : [];
+                  console.log('Dimensions extraites:', dimensions);
+                  
+                  // Préparer les champs du véhicule à enregistrer
+                  const vehicleFields = {
+                    "status": "New",
+                    "quote_id": quoteId,
+                    "type": vehicle.type || '',
+                    "registration": '', // Champ optionnel non fourni actuellement
+                    "brand": vehicle.brand || '',
+                    "model": vehicle.model || '',
+                    "value": parseFloat(vehicle.value) || 0,
+                    "year": '', // Champ optionnel non fourni actuellement
+                    "length": dimensions[0] || '', // Optionnel - première dimension si disponible
+                    "width": dimensions[1] || '',  // Optionnel - deuxième dimension si disponible
+                    "height": dimensions[2] || '', // Optionnel - troisième dimension si disponible
+                    "weight": ''  // Champ optionnel non fourni actuellement
+                  };
+                  
+                  console.log(`Tentative d'enregistrement du véhicule ${vehicle.brand} ${vehicle.model}`);
+                  console.log('Champs du véhicule:', JSON.stringify(vehicleFields));
                   
                   await base(vehiclesTableId).create([
                     {
-                      fields: {
-                        "status": "New",
-                        "quote_id": quoteId,
-                        "type": vehicle.type || '',
-                        "registration": '', // Champ optionnel non fourni actuellement
-                        "brand": vehicle.brand || '',
-                        "model": vehicle.model || '',
-                        "value": parseFloat(vehicle.value) || 0,
-                        "year": '', // Champ optionnel non fourni actuellement
-                        "length": dimensions[0] || '', // Optionnel - première dimension si disponible
-                        "width": dimensions[1] || '',  // Optionnel - deuxième dimension si disponible
-                        "height": dimensions[2] || '', // Optionnel - troisième dimension si disponible
-                        "weight": ''  // Champ optionnel non fourni actuellement
-                      }
+                      fields: vehicleFields
                     }
                   ]);
                   console.log(`Véhicule ${vehicle.brand} ${vehicle.model} enregistré avec succès`);
