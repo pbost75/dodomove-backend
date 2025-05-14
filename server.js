@@ -438,7 +438,9 @@ app.post('/submit-funnel', async (req, res) => {
     
     if (dateFormat) {
       console.log('Utilisation du format de date préformaté');
+      console.log('dateFormat reçu:', JSON.stringify(dateFormat));
       movingDate = dateFormat;
+      console.log('movingDate après affectation:', JSON.stringify(movingDate));
     }
     
     if (vehiclesFormat && vehiclesFormat.length > 0) {
@@ -584,11 +586,16 @@ app.post('/submit-funnel', async (req, res) => {
           return result.trim();
         };
           
-        // Formater les dates pour Airtable
+        // Fonction auxiliaire pour formater les dates pour Airtable
         const formatDateForAirtable = () => {
           if (!movingDate) return { date_type: 'Non spécifiée' };
           
+          console.log('formatDateForAirtable - movingDate:', JSON.stringify(movingDate));
+          console.log('Propriétés disponibles dans movingDate:', Object.keys(movingDate));
+          
           if (movingDate.isFlexible) {
+            console.log('Date flexible - startDate:', movingDate.startDate);
+            console.log('Date flexible - endDate:', movingDate.endDate);
             return {
               date_type: 'Flexible',
               exact_date: null,
@@ -596,6 +603,7 @@ app.post('/submit-funnel', async (req, res) => {
               end_date: movingDate.endDate
             };
           } else {
+            console.log('Date exacte - exactDate:', movingDate.exactDate);
             return {
               date_type: 'Exacte',
               exact_date: movingDate.exactDate,
