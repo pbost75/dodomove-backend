@@ -753,7 +753,8 @@ app.post('/submit-funnel', async (req, res) => {
                     "year": '', // Champ optionnel non fourni actuellement
                     "length": dimensions[0] || '', // Optionnel - première dimension si disponible
                     "width": dimensions[1] || '',  // Optionnel - deuxième dimension si disponible
-                    "height": dimensions[2] || '' // Optionnel - troisième dimension si disponible
+                    "height": dimensions[2] || '', // Optionnel - troisième dimension si disponible
+                    "weight": ''  // Champ optionnel non fourni actuellement
                   };
                   
                   // Vérifier si le type fourni est un type valide dans nos options
@@ -776,14 +777,18 @@ app.post('/submit-funnel', async (req, res) => {
                   
                   // Tentative avec uniquement les champs essentiels
                   try {
+                    const minimalVehicleFields = {
+                      "quote_id": quoteId,
+                      "type": ['car', 'motorcycle', 'scooter', 'quad', 'boat', 'other'].includes(vehicle.type) ? vehicle.type : 'other',
+                      "brand": vehicle.brand || '',
+                      "model": vehicle.model || ''
+                    };
+                    
+                    console.log(`Tentative d'enregistrement minimal du véhicule avec champs:`, JSON.stringify(minimalVehicleFields));
+                    
                     await base(vehiclesTableId).create([
                       {
-                        fields: {
-                          "quote_id": quoteId,
-                          "type": ['car', 'motorcycle', 'scooter', 'quad', 'boat', 'other'].includes(vehicle.type) ? vehicle.type : 'other',
-                          "brand": vehicle.brand || '',
-                          "model": vehicle.model || ''
-                        }
+                        fields: minimalVehicleFields
                       }
                     ]);
                     console.log(`Véhicule ${vehicle.brand} ${vehicle.model} enregistré avec champs minimaux`);
