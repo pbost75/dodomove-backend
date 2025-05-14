@@ -505,11 +505,11 @@ app.post('/submit-funnel', async (req, res) => {
       // SIMPLIFIÉ: Juste les champs essentiels pour le test
       // -------------------------------------------------------
       const simplifiedFields = {
-        "id": reference,
-        "submission_date": new Date().toISOString(),
-        "first_name": contactInfo.firstName,
-        "last_name": contactInfo.lastName,
-        "email": contactInfo.email
+        "created_at": new Date().toISOString(),
+        "status": "New",
+        "contact_first_name": contactInfo.firstName,
+        "contact_last_name": contactInfo.lastName,
+        "contact_email": contactInfo.email
       };
       
       console.log('Champs SIMPLIFIÉS pour Airtable:', JSON.stringify(simplifiedFields));
@@ -607,61 +607,67 @@ app.post('/submit-funnel', async (req, res) => {
         
         // Préparer les champs à envoyer avec une validation supplémentaire
         const fields = {
-          // Référence et métadonnées
-          "id": reference,
-          "submission_date": new Date().toISOString(),
+          // Métadonnées
+          "created_at": new Date().toISOString(),
           "status": "New",
           
           // Informations de contact (déjà validées)
-          "first_name": contactInfo.firstName,
-          "last_name": contactInfo.lastName,
-          "email": contactInfo.email,
-          "phone": contactInfo.phone || '',
-          "comment": contactInfo.comment || '',
+          "contact_first_name": contactInfo.firstName,
+          "contact_last_name": contactInfo.lastName,
+          "contact_email": contactInfo.email,
+          "contact_phone": contactInfo.phone || '',
+          "attached_note": contactInfo.comment || '',
           
           // Adresses avec validation de nullité
-          "departure_address": departureAddress ? formatAddress(departureAddress) : '',
-          "departure_city": departureAddress?.city || '',
-          "departure_postal_code": departureAddress?.postalCode || '',
           "departure_country": departureAddress?.country || '',
+          "departure_postal_code": departureAddress?.postalCode || '',
+          "departure_city": departureAddress?.city || '',
+          "departure_street": departureAddress?.street || '',
+          "departure_number": departureAddress?.number || '',
+          "departure_additional_info": '',
           
-          "arrival_address": arrivalAddress ? formatAddress(arrivalAddress) : '',
-          "arrival_approx_address": arrivalAddress?.unknownExactAddress ? "Yes" : "No",
+          "arrival_country": arrivalAddress?.country || '',
+          "arrival_unknown_exact_address": arrivalAddress?.unknownExactAddress ? true : false,
           "arrival_city": arrivalAddress?.city || '',
           "arrival_postal_code": arrivalAddress?.postalCode || '',
-          "arrival_country": arrivalAddress?.country || '',
+          "arrival_street": arrivalAddress?.street || '',
+          "arrival_number": arrivalAddress?.number || '',
+          "arrival_additional_info": '',
           
           // Dates avec validation
-          "date_type": formatDateForAirtable().date_type,
-          "exact_date": formatDateForAirtable().exact_date || null,
-          "start_date": formatDateForAirtable().start_date || null,
-          "end_date": formatDateForAirtable().end_date || null,
+          "moving_is_flexible": movingDate?.isFlexible || false,
+          "moving_exact_date": movingDate?.exactDate || null,
+          "moving_start_date": movingDate?.startDate || null,
+          "moving_end_date": movingDate?.endDate || null,
           
           // Méthodes et logements
-          "pickup_method": pickupMethod === 'home' ? 'Home' : 'Port',
-          "delivery_method": deliveryMethod === 'home' ? 'Home' : 'Port',
+          "pickup_method": pickupMethod || '',
+          "pickup_housing_type": pickupHousingInfo?.type || '',
+          "pickup_housing_floor": pickupHousingInfo?.floor || 0,
+          "pickup_housing_has_elevator": pickupHousingInfo?.hasElevator || false,
           
-          // Info logements avec validation de nullité
-          "departure_housing_type": pickupHousingInfo?.type || '',
-          "departure_floor": pickupHousingInfo?.floor || 0,
-          "departure_elevator": pickupHousingInfo?.hasElevator ? "Yes" : "No",
-          
-          "arrival_housing_type": deliveryHousingInfo?.type || '',
-          "arrival_floor": deliveryHousingInfo?.floor || 0,
-          "arrival_elevator": deliveryHousingInfo?.hasElevator ? "Yes" : "No",
+          "delivery_method": deliveryMethod || '',
+          "delivery_housing_type": deliveryHousingInfo?.type || '',
+          "delivery_housing_floor": deliveryHousingInfo?.floor || 0,
+          "delivery_housing_has_elevator": deliveryHousingInfo?.hasElevator || false,
           
           // Motif et exonération
-          "shipping_reason": shippingReason === 'moving' ? 'Moving' : 'Purchase',
-          "tax_exemption": taxExemptionEligibility === 'yes' ? 'Yes' : 'No',
+          "shipping_reason": shippingReason || '',
+          "tax_exemption_eligible": taxExemptionEligibility === 'yes' ? true : false,
           
           // Objets à expédier avec validation
-          "personal_belongings": shippingItems?.personalBelongings ? "Yes" : "No",
-          "estimated_volume": personalBelongingsDetails?.estimatedVolume || '',
-          "belongings_description": personalBelongingsDetails?.description || '',
-          "image_url": personalBelongingsDetails?.imageUrl || '',
+          "has_personal_belongings": shippingItems?.personalBelongings || false,
+          "has_vehicles": shippingItems?.vehicles || false,
+          "personal_belongings_volume": personalBelongingsDetails?.estimatedVolume || '',
+          "personal_belongings_details": personalBelongingsDetails?.description || '',
+          "belongings_photos": personalBelongingsDetails?.imageUrl || '',
           
           // Véhicules - compteurs
-          "vehicles_count": vehicleCounts.total
+          "vehicles_count_total": vehicleCounts.total,
+          "vehicles_count_cars": vehicleCounts.car,
+          "vehicles_count_motorcycles": vehicleCounts.motorcycle,
+          "vehicles_count_boats": vehicleCounts.boat,
+          "vehicles_count_other": vehicleCounts.other
         };
         
         // Pour éviter les erreurs de champs non attendus, loggons chaque champ individuellement
@@ -755,10 +761,10 @@ app.post('/submit-funnel', async (req, res) => {
           
           // Dernier fallback avec juste l'ID
           try {
-            console.log('🔄 DERNIÈRE TENTATIVE: ajout minimal avec uniquement email et référence...');
+            console.log('🔄 DERNIÈRE TENTATIVE: ajout minimal avec uniquement email...');
             const minimalFields = {
-              "email": contactInfo.email,
-              "id": reference
+              "contact_email": contactInfo.email,
+              "created_at": new Date().toISOString()
             };
             
             const minimalRecord = await base(demandesTableId).create([
