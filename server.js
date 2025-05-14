@@ -52,6 +52,60 @@ app.get('/_health', (req, res) => {
   res.status(200).send('OK');
 });
 
+// Route pour tester directement la connexion Airtable
+app.get('/test-airtable', async (req, res) => {
+  console.log('GET /test-airtable appelé');
+  try {
+    // Vérifier si les variables d'environnement sont définies
+    console.log('AIRTABLE_API_KEY défini:', !!process.env.AIRTABLE_API_KEY);
+    console.log('AIRTABLE_BASE_ID défini:', !!process.env.AIRTABLE_BASE_ID);
+    
+    if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
+      return res.status(500).json({
+        success: false,
+        error: 'Variables d\'environnement Airtable manquantes',
+        env: {
+          AIRTABLE_API_KEY: !!process.env.AIRTABLE_API_KEY,
+          AIRTABLE_BASE_ID: !!process.env.AIRTABLE_BASE_ID
+        }
+      });
+    }
+    
+    // Test de connexion à Airtable
+    const testReference = `TEST-${Date.now()}`;
+    const demandesTableId = 'tblic0CaPaaKZwouK'; // ID de la table des demandes
+    
+    // Créer un enregistrement de test simple
+    const record = await base(demandesTableId).create([
+      {
+        fields: {
+          "Référence": testReference,
+          "Prénom": "Test",
+          "Nom": "Connexion",
+          "Email": "test@example.com",
+          "Date de soumission": new Date().toISOString(),
+          "Statut": "Test"
+        }
+      }
+    ]);
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Connexion à Airtable réussie',
+      record: record,
+      testReference: testReference
+    });
+  } catch (error) {
+    console.error('Erreur lors du test Airtable:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la connexion à Airtable',
+      details: error.message,
+      stack: error.stack
+    });
+  }
+});
+
 // Parse JSON bodies
 app.use(express.json());
 
@@ -339,9 +393,19 @@ app.post('/send-email', async (req, res) => {
 // Route pour traiter les leads du funnel de devis
 app.post('/submit-funnel', async (req, res) => {
   console.log('POST /submit-funnel appelé');
-  console.log('Body reçu:', req.body);
+  console.log('Body reçu:', JSON.stringify(req.body).substring(0, 500) + '...'); // Affichage partiel pour éviter les logs trop longs
   
   try {
+    // Vérification explicite des variables d'environnement Airtable
+    console.log('Vérification des variables d\'environnement Airtable:');
+    console.log('- AIRTABLE_API_KEY défini:', !!process.env.AIRTABLE_API_KEY);
+    console.log('- AIRTABLE_BASE_ID défini:', !!process.env.AIRTABLE_BASE_ID);
+    
+    if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
+      console.error('ERROR: Variables d\'environnement Airtable manquantes');
+      // On continue le traitement mais on log l'erreur
+    }
+    
     // Déstructuration initiale avec variables modifiables (let au lieu de const)
     let { 
       contactInfo, 
@@ -701,6 +765,8 @@ app.post('/submit-funnel', async (req, res) => {
     // Enregistrer les données dans Airtable
     try {
       console.log('Enregistrement des données du funnel dans Airtable...');
+      console.log('AIRTABLE_API_KEY tronqué:', process.env.AIRTABLE_API_KEY ? process.env.AIRTABLE_API_KEY.substring(0, 5) + '...' : 'non défini');
+      console.log('AIRTABLE_BASE_ID complet:', process.env.AIRTABLE_BASE_ID || 'non défini');
       
       // Compter le nombre de véhicules par type
       const vehicleCounts = {
@@ -762,109 +828,136 @@ app.post('/submit-funnel', async (req, res) => {
       try {
         // Utiliser l'ID direct de la table pour les demandes du funnel
         const demandesTableId = 'tblic0CaPaaKZwouK'; // ID spécifique pour les demandes du funnel
-        await base(demandesTableId).create([
-          {
-            fields: {
-              // Référence et métadonnées
-              "Référence": reference,
-              "Date de soumission": new Date().toISOString(),
-              "Statut": "Nouveau",
-              
-              // Informations de contact
-              "Prénom": contactInfo.firstName,
-              "Nom": contactInfo.lastName,
-              "Email": contactInfo.email,
-              "Téléphone": contactInfo.phone,
-              "Commentaire": contactInfo.comment || '',
-              
-              // Adresses
-              "Adresse de départ": formatAddress(departureAddress),
-              "Ville de départ": departureAddress.city,
-              "Code postal départ": departureAddress.postalCode,
-              "Pays de départ": departureAddress.country,
-              
-              "Adresse d'arrivée": formatAddress(arrivalAddress),
-              "Adresse arrivée approximative": arrivalAddress.unknownExactAddress ? "Oui" : "Non",
-              "Ville d'arrivée": arrivalAddress.city,
-              "Code postal arrivée": arrivalAddress.postalCode,
-              "Pays d'arrivée": arrivalAddress.country,
-              
-              // Dates
-              "Type de date": formatDateForAirtable().date_type,
-              "Date exacte": formatDateForAirtable().exact_date,
-              "Date début": formatDateForAirtable().start_date,
-              "Date fin": formatDateForAirtable().end_date,
-              
-              // Méthodes et logements
-              "Méthode de ramassage": pickupMethod === 'home' ? 'Domicile' : 'Port',
-              "Méthode de livraison": deliveryMethod === 'home' ? 'Domicile' : 'Port',
-              
-              "Type de logement départ": pickupHousingInfo.type,
-              "Étage départ": pickupHousingInfo.floor,
-              "Ascenseur départ": pickupHousingInfo.hasElevator ? "Oui" : "Non",
-              
-              "Type de logement arrivée": deliveryHousingInfo.type,
-              "Étage arrivée": deliveryHousingInfo.floor,
-              "Ascenseur arrivée": deliveryHousingInfo.hasElevator ? "Oui" : "Non",
-              
-              // Motif et exonération
-              "Motif d'envoi": shippingReason === 'moving' ? 'Déménagement' : 'Achat',
-              "Éligible exonération fiscale": taxExemptionEligibility === 'yes' ? 'Oui' : 'Non',
-              
-              // Objets à expédier
-              "Effets personnels": shippingItems.personalBelongings ? "Oui" : "Non",
-              "Volume estimé": personalBelongingsDetails.estimatedVolume,
-              "Description effets personnels": personalBelongingsDetails.description || '',
-              "Image URL": personalBelongingsDetails.imageUrl || '',
-              
-              // Véhicules - compteurs
-              "Nombre de véhicules": vehicleCounts.total,
-              "Nombre de voitures": vehicleCounts.car,
-              "Nombre de motos": vehicleCounts.motorcycle,
-              "Nombre de scooters": vehicleCounts.scooter,
-              "Nombre de quads": vehicleCounts.quad,
-              "Nombre de bateaux": vehicleCounts.boat,
-              "Nombre d'autres véhicules": vehicleCounts.other
+        console.log('Tentative d\'enregistrement dans Airtable avec l\'ID de table:', demandesTableId);
+        
+        // Préparer les champs à envoyer
+        const fields = {
+          // Référence et métadonnées
+          "Référence": reference,
+          "Date de soumission": new Date().toISOString(),
+          "Statut": "Nouveau",
+          
+          // Informations de contact
+          "Prénom": contactInfo.firstName,
+          "Nom": contactInfo.lastName,
+          "Email": contactInfo.email,
+          "Téléphone": contactInfo.phone,
+          "Commentaire": contactInfo.comment || '',
+          
+          // Adresses
+          "Adresse de départ": formatAddress(departureAddress),
+          "Ville de départ": departureAddress.city,
+          "Code postal départ": departureAddress.postalCode,
+          "Pays de départ": departureAddress.country,
+          
+          "Adresse d'arrivée": formatAddress(arrivalAddress),
+          "Adresse arrivée approximative": arrivalAddress.unknownExactAddress ? "Oui" : "Non",
+          "Ville d'arrivée": arrivalAddress.city,
+          "Code postal arrivée": arrivalAddress.postalCode,
+          "Pays d'arrivée": arrivalAddress.country,
+          
+          // Dates
+          "Type de date": formatDateForAirtable().date_type,
+          "Date exacte": formatDateForAirtable().exact_date,
+          "Date début": formatDateForAirtable().start_date,
+          "Date fin": formatDateForAirtable().end_date,
+          
+          // Méthodes et logements
+          "Méthode de ramassage": pickupMethod === 'home' ? 'Domicile' : 'Port',
+          "Méthode de livraison": deliveryMethod === 'home' ? 'Domicile' : 'Port',
+          
+          "Type de logement départ": pickupHousingInfo.type,
+          "Étage départ": pickupHousingInfo.floor,
+          "Ascenseur départ": pickupHousingInfo.hasElevator ? "Oui" : "Non",
+          
+          "Type de logement arrivée": deliveryHousingInfo.type,
+          "Étage arrivée": deliveryHousingInfo.floor,
+          "Ascenseur arrivée": deliveryHousingInfo.hasElevator ? "Oui" : "Non",
+          
+          // Motif et exonération
+          "Motif d'envoi": shippingReason === 'moving' ? 'Déménagement' : 'Achat',
+          "Éligible exonération fiscale": taxExemptionEligibility === 'yes' ? 'Oui' : 'Non',
+          
+          // Objets à expédier
+          "Effets personnels": shippingItems.personalBelongings ? "Oui" : "Non",
+          "Volume estimé": personalBelongingsDetails.estimatedVolume,
+          "Description effets personnels": personalBelongingsDetails.description || '',
+          "Image URL": personalBelongingsDetails.imageUrl || '',
+          
+          // Véhicules - compteurs
+          "Nombre de véhicules": vehicleCounts.total,
+          "Nombre de voitures": vehicleCounts.car,
+          "Nombre de motos": vehicleCounts.motorcycle,
+          "Nombre de scooters": vehicleCounts.scooter,
+          "Nombre de quads": vehicleCounts.quad,
+          "Nombre de bateaux": vehicleCounts.boat,
+          "Nombre d'autres véhicules": vehicleCounts.other
+        };
+        
+        console.log('Champs préparés pour Airtable:', JSON.stringify(fields).substring(0, 500) + '...');
+        
+        // Essai d'enregistrement avec gestion d'erreur détaillée
+        let createdRecords;
+        try {
+          createdRecords = await base(demandesTableId).create([
+            {
+              fields: fields
             }
-          }
-        ]);
-        console.log('Données du funnel enregistrées dans Airtable (table ID tblic0CaPaaKZwouK) avec succès');
-        
-        // Si des véhicules sont présents, les enregistrer dans la table véhicules avec son ID spécifique
-        if (vehicleDetails && vehicleDetails.length > 0) {
-          console.log(`Enregistrement de ${vehicleDetails.length} véhicules dans Airtable...`);
+          ]);
           
-          const typeMap = {
-            'car': 'Voiture',
-            'motorcycle': 'Moto',
-            'scooter': 'Scooter',
-            'quad': 'Quad',
-            'boat': 'Bateau',
-            'other': 'Autre'
-          };
+          console.log('Réponse d\'Airtable:', JSON.stringify(createdRecords));
+          console.log('Données du funnel enregistrées dans Airtable (table ID tblic0CaPaaKZwouK) avec succès');
           
-          const vehiclesTableId = 'tblVffkJ0XQx5wB9L'; // ID spécifique pour les véhicules
-          
-          // Enregistrer chaque véhicule avec la référence de la demande
-          for (const vehicle of vehicleDetails) {
-            await base(vehiclesTableId).create([
-              {
-                fields: {
-                  "Référence demande": reference,
-                  "Type de véhicule": typeMap[vehicle.type || 'other'] || 'Autre',
-                  "Marque": vehicle.brand || '',
-                  "Modèle": vehicle.model || '',
-                  "Dimensions": vehicle.size || '',
-                  "Valeur": vehicle.value || '',
-                  "Puissance (CV)": vehicle.power || ''
+          // Si des véhicules sont présents, les enregistrer dans la table véhicules avec son ID spécifique
+          if (vehicleDetails && vehicleDetails.length > 0) {
+            console.log(`Enregistrement de ${vehicleDetails.length} véhicules dans Airtable...`);
+            
+            const typeMap = {
+              'car': 'Voiture',
+              'motorcycle': 'Moto',
+              'scooter': 'Scooter',
+              'quad': 'Quad',
+              'boat': 'Bateau',
+              'other': 'Autre'
+            };
+            
+            const vehiclesTableId = 'tblVffkJ0XQx5wB9L'; // ID spécifique pour les véhicules
+            
+            // Enregistrer chaque véhicule avec la référence de la demande
+            for (const vehicle of vehicleDetails) {
+              await base(vehiclesTableId).create([
+                {
+                  fields: {
+                    "Référence demande": reference,
+                    "Type de véhicule": typeMap[vehicle.type || 'other'] || 'Autre',
+                    "Marque": vehicle.brand || '',
+                    "Modèle": vehicle.model || '',
+                    "Dimensions": vehicle.size || '',
+                    "Valeur": vehicle.value || '',
+                    "Puissance (CV)": vehicle.power || ''
+                  }
                 }
-              }
-            ]);
+              ]);
+            }
+            
+            console.log('Véhicules enregistrés dans Airtable (table ID tblVffkJ0XQx5wB9L) avec succès');
           }
           
-          console.log('Véhicules enregistrés dans Airtable (table ID tblVffkJ0XQx5wB9L) avec succès');
+        } catch (airtableError) {
+          console.error('ERREUR CRITIQUE: Échec de l\'enregistrement dans Airtable:');
+          console.error('- Message:', airtableError.message);
+          console.error('- Type d\'erreur:', airtableError.name);
+          if (airtableError.statusCode) {
+            console.error('- Code HTTP:', airtableError.statusCode);
+          }
+          if (airtableError.error) {
+            console.error('- Détails erreur:', JSON.stringify(airtableError.error));
+          }
+          console.error('- Stack trace:', airtableError.stack);
+          
+          // Passons au fallback
+          throw airtableError;
         }
-        
       } catch (funnelTableError) {
         console.error('Erreur avec les tables spécifiques au funnel:', funnelTableError);
         
