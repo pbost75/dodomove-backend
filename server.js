@@ -359,17 +359,44 @@ app.post('/submit-funnel', async (req, res) => {
     } = req.body;
     
     // Vérification des données requises
-    if (!contactInfo || !contactInfo.email || !contactInfo.firstName || !contactInfo.lastName) {
-      console.error('Données de contact manquantes');
+    if (!contactInfo) {
+      console.error('Données de contact complètement manquantes');
       return res.status(400).json({ 
         success: false, 
         error: 'Données de contact manquantes',
         received: { 
-          hasContactInfo: !!contactInfo,
-          hasEmail: contactInfo?.email,
-          hasFirstName: contactInfo?.firstName,
-          hasLastName: contactInfo?.lastName
+          body: req.body
         }
+      });
+    }
+    
+    console.log('Structure de contactInfo:', JSON.stringify(contactInfo));
+    
+    // Vérification des champs requis avec plus de tolérance
+    if (!contactInfo.email) {
+      console.error('Email manquant dans les données de contact');
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Email manquant',
+        received: contactInfo
+      });
+    }
+    
+    if (!contactInfo.firstName) {
+      console.error('Prénom manquant dans les données de contact');
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Prénom manquant',
+        received: contactInfo
+      });
+    }
+    
+    if (!contactInfo.lastName) {
+      console.error('Nom manquant dans les données de contact');
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Nom manquant',
+        received: contactInfo
       });
     }
 
