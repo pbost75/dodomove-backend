@@ -701,25 +701,58 @@ app.post('/submit-funnel', async (req, res) => {
             
             const vehiclesTableId = 'tblVffkJ0XQx5wB9L'; // ID spécifique pour les véhicules
             
-            // Enregistrer chaque véhicule avec la référence de la demande
-            for (const vehicle of vehicleDetails) {
-              try {
-                await base(vehiclesTableId).create([
-                  {
-                    fields: {
-                      "quote_reference": reference,
-                      "vehicle_type": typeMap[vehicle.type || 'other'] || 'Other',
-                      "brand": vehicle.brand || '',
-                      "model": vehicle.model || '',
-                      "dimensions": vehicle.size || '',
-                      "value": vehicle.value || '',
-                      "power": vehicle.power || ''
+            // Vérifier si nous avons un ID de demande valide pour la relation
+            const quoteId = completeRecord && completeRecord[0] && completeRecord[0].id ? [completeRecord[0].id] : null;
+            if (!quoteId) {
+              console.warn("⚠️ Impossible de créer des véhicules sans ID de demande valide pour la relation");
+            } else {
+              // Enregistrer chaque véhicule avec la référence de la demande
+              for (const vehicle of vehicleDetails) {
+                try {
+                  // Format des dimensions du véhicule si disponible
+                  const dimensions = vehicle.size ? vehicle.size.split('x').map(dim => dim.trim()) : [];
+                  
+                  await base(vehiclesTableId).create([
+                    {
+                      fields: {
+                        "status": "New",
+                        "quote_id": quoteId,
+                        "type": vehicle.type || '',
+                        "registration": '', // Champ optionnel non fourni actuellement
+                        "brand": vehicle.brand || '',
+                        "model": vehicle.model || '',
+                        "value": parseFloat(vehicle.value) || 0,
+                        "year": '', // Champ optionnel non fourni actuellement
+                        "length": dimensions[0] || '', // Optionnel - première dimension si disponible
+                        "width": dimensions[1] || '',  // Optionnel - deuxième dimension si disponible
+                        "height": dimensions[2] || '', // Optionnel - troisième dimension si disponible
+                        "weight": ''  // Champ optionnel non fourni actuellement
+                      }
                     }
+                  ]);
+                  console.log(`Véhicule ${vehicle.brand} ${vehicle.model} enregistré avec succès`);
+                } catch (vehicleError) {
+                  console.error(`Erreur lors de l'enregistrement du véhicule:`, vehicleError.message);
+                  console.error(`Détails de l'erreur:`, vehicleError);
+                  
+                  // Tentative avec uniquement les champs essentiels
+                  try {
+                    await base(vehiclesTableId).create([
+                      {
+                        fields: {
+                          "status": "New",
+                          "quote_id": quoteId,
+                          "type": vehicle.type || '',
+                          "brand": vehicle.brand || '',
+                          "model": vehicle.model || ''
+                        }
+                      }
+                    ]);
+                    console.log(`Véhicule ${vehicle.brand} ${vehicle.model} enregistré avec champs minimaux`);
+                  } catch (minimalVehicleError) {
+                    console.error(`Échec de l'enregistrement minimal du véhicule:`, minimalVehicleError.message);
                   }
-                ]);
-                console.log(`Véhicule ${vehicle.brand} ${vehicle.model} enregistré avec succès`);
-              } catch (vehicleError) {
-                console.error(`Erreur lors de l'enregistrement du véhicule:`, vehicleError.message);
+                }
               }
             }
             
