@@ -505,7 +505,7 @@ app.post('/submit-funnel', async (req, res) => {
       // SIMPLIFIÉ: Juste les champs essentiels pour le test
       // -------------------------------------------------------
       const simplifiedFields = {
-        "created_at": new Date().toISOString(),
+        // "created_at": new Date().toISOString(), // Supprimé car c'est un champ calculé par Airtable
         "status": "New",
         "contact_first_name": contactInfo.firstName,
         "contact_last_name": contactInfo.lastName,
@@ -608,7 +608,7 @@ app.post('/submit-funnel', async (req, res) => {
         // Préparer les champs à envoyer avec une validation supplémentaire
         const fields = {
           // Métadonnées
-          "created_at": new Date().toISOString(),
+          // "created_at": new Date().toISOString(), // Supprimé car c'est un champ calculé par Airtable
           "status": "New",
           
           // Informations de contact (déjà validées)
@@ -796,8 +796,8 @@ app.post('/submit-funnel', async (req, res) => {
           try {
             console.log('🔄 DERNIÈRE TENTATIVE: ajout minimal avec uniquement email...');
             const minimalFields = {
-              "contact_email": contactInfo.email,
-              "created_at": new Date().toISOString()
+              "contact_email": contactInfo.email
+              // "created_at": new Date().toISOString() // Supprimé car c'est un champ calculé par Airtable
             };
             
             const minimalRecord = await base(demandesTableId).create([
