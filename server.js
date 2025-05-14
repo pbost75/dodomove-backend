@@ -372,33 +372,47 @@ app.post('/submit-funnel', async (req, res) => {
     
     console.log('Structure de contactInfo:', JSON.stringify(contactInfo));
     
+    // Reconstruire l'objet contactInfo pour s'assurer de sa structure
+    const normalizedContactInfo = {
+      firstName: contactInfo.firstName || '',
+      lastName: contactInfo.lastName || '',
+      email: contactInfo.email || '',
+      phone: contactInfo.phone || '',
+      comment: contactInfo.comment || ''
+    };
+    
+    console.log('ContactInfo normalisé:', JSON.stringify(normalizedContactInfo));
+    
     // Vérification des champs requis avec plus de tolérance
-    if (!contactInfo.email) {
+    if (!normalizedContactInfo.email) {
       console.error('Email manquant dans les données de contact');
       return res.status(400).json({ 
         success: false, 
         error: 'Email manquant',
-        received: contactInfo
+        received: normalizedContactInfo
       });
     }
     
-    if (!contactInfo.firstName) {
+    if (!normalizedContactInfo.firstName) {
       console.error('Prénom manquant dans les données de contact');
       return res.status(400).json({ 
         success: false, 
         error: 'Prénom manquant',
-        received: contactInfo
+        received: normalizedContactInfo
       });
     }
     
-    if (!contactInfo.lastName) {
+    if (!normalizedContactInfo.lastName) {
       console.error('Nom manquant dans les données de contact');
       return res.status(400).json({ 
         success: false, 
         error: 'Nom manquant',
-        received: contactInfo
+        received: normalizedContactInfo
       });
     }
+    
+    // Remplacer l'original par la version normalisée
+    contactInfo = normalizedContactInfo;
 
     // Formater les adresses
     const formatAddress = (address) => {
