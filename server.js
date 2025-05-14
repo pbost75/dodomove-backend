@@ -342,7 +342,8 @@ app.post('/submit-funnel', async (req, res) => {
   console.log('Body reçu:', req.body);
   
   try {
-    const { 
+    // Déstructuration initiale avec variables modifiables (let au lieu de const)
+    let { 
       contactInfo, 
       departureAddress, 
       arrivalAddress, 
@@ -355,8 +356,29 @@ app.post('/submit-funnel', async (req, res) => {
       taxExemptionEligibility, 
       shippingItems, 
       personalBelongingsDetails, 
-      vehicleDetails 
+      vehicleDetails,
+      // Nouveaux formats de données (format Airtable)
+      addressFormat,
+      dateFormat,
+      vehiclesFormat
     } = req.body;
+    
+    // Support pour le nouveau format de données
+    if (addressFormat) {
+      console.log('Utilisation du format d\'adresse préformaté');
+      if (addressFormat.departure) departureAddress = addressFormat.departure;
+      if (addressFormat.arrival) arrivalAddress = addressFormat.arrival;
+    }
+    
+    if (dateFormat) {
+      console.log('Utilisation du format de date préformaté');
+      movingDate = dateFormat;
+    }
+    
+    if (vehiclesFormat && vehiclesFormat.length > 0) {
+      console.log('Utilisation du format de véhicules préformaté');
+      vehicleDetails = vehiclesFormat;
+    }
     
     // Vérification des données requises
     if (!contactInfo) {

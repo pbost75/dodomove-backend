@@ -1,16 +1,21 @@
 [build]
 builder = "nixpacks"
 buildCommand = "npm install"
+watchPatterns = ["/server.js", "/package.json"]
 
 [deploy]
 startCommand = "node server.js"
 healthcheckPath = "/"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 10
+restartPolicyMaxRetries = 3
 
 [nixpacks]
 features = ["node"]
 
 [service]
-port = 8080 
+port = 8080
+
+# Logs
+[logging]
+level = "info" 
