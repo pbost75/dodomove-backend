@@ -505,11 +505,11 @@ app.post('/submit-funnel', async (req, res) => {
       // SIMPLIFIÉ: Juste les champs essentiels pour le test
       // -------------------------------------------------------
       const simplifiedFields = {
-        "Référence": reference,
-        "Date de soumission": new Date().toISOString(),
-        "Prénom": contactInfo.firstName,
-        "Nom": contactInfo.lastName,
-        "Email": contactInfo.email
+        "id": reference,
+        "submission_date": new Date().toISOString(),
+        "first_name": contactInfo.firstName,
+        "last_name": contactInfo.lastName,
+        "email": contactInfo.email
       };
       
       console.log('Champs SIMPLIFIÉS pour Airtable:', JSON.stringify(simplifiedFields));
@@ -608,60 +608,60 @@ app.post('/submit-funnel', async (req, res) => {
         // Préparer les champs à envoyer avec une validation supplémentaire
         const fields = {
           // Référence et métadonnées
-          "Référence": reference,
-          "Date de soumission": new Date().toISOString(),
-          "Statut": "Nouveau",
+          "id": reference,
+          "submission_date": new Date().toISOString(),
+          "status": "New",
           
           // Informations de contact (déjà validées)
-          "Prénom": contactInfo.firstName,
-          "Nom": contactInfo.lastName,
-          "Email": contactInfo.email,
-          "Téléphone": contactInfo.phone || '',
-          "Commentaire": contactInfo.comment || '',
+          "first_name": contactInfo.firstName,
+          "last_name": contactInfo.lastName,
+          "email": contactInfo.email,
+          "phone": contactInfo.phone || '',
+          "comment": contactInfo.comment || '',
           
           // Adresses avec validation de nullité
-          "Adresse de départ": departureAddress ? formatAddress(departureAddress) : '',
-          "Ville de départ": departureAddress?.city || '',
-          "Code postal départ": departureAddress?.postalCode || '',
-          "Pays de départ": departureAddress?.country || '',
+          "departure_address": departureAddress ? formatAddress(departureAddress) : '',
+          "departure_city": departureAddress?.city || '',
+          "departure_postal_code": departureAddress?.postalCode || '',
+          "departure_country": departureAddress?.country || '',
           
-          "Adresse d'arrivée": arrivalAddress ? formatAddress(arrivalAddress) : '',
-          "Adresse arrivée approximative": arrivalAddress?.unknownExactAddress ? "Oui" : "Non",
-          "Ville d'arrivée": arrivalAddress?.city || '',
-          "Code postal arrivée": arrivalAddress?.postalCode || '',
-          "Pays d'arrivée": arrivalAddress?.country || '',
+          "arrival_address": arrivalAddress ? formatAddress(arrivalAddress) : '',
+          "arrival_approx_address": arrivalAddress?.unknownExactAddress ? "Yes" : "No",
+          "arrival_city": arrivalAddress?.city || '',
+          "arrival_postal_code": arrivalAddress?.postalCode || '',
+          "arrival_country": arrivalAddress?.country || '',
           
           // Dates avec validation
-          "Type de date": formatDateForAirtable().date_type,
-          "Date exacte": formatDateForAirtable().exact_date || null,
-          "Date début": formatDateForAirtable().start_date || null,
-          "Date fin": formatDateForAirtable().end_date || null,
+          "date_type": formatDateForAirtable().date_type,
+          "exact_date": formatDateForAirtable().exact_date || null,
+          "start_date": formatDateForAirtable().start_date || null,
+          "end_date": formatDateForAirtable().end_date || null,
           
           // Méthodes et logements
-          "Méthode de ramassage": pickupMethod === 'home' ? 'Domicile' : 'Port',
-          "Méthode de livraison": deliveryMethod === 'home' ? 'Domicile' : 'Port',
+          "pickup_method": pickupMethod === 'home' ? 'Home' : 'Port',
+          "delivery_method": deliveryMethod === 'home' ? 'Home' : 'Port',
           
           // Info logements avec validation de nullité
-          "Type de logement départ": pickupHousingInfo?.type || '',
-          "Étage départ": pickupHousingInfo?.floor || 0,
-          "Ascenseur départ": pickupHousingInfo?.hasElevator ? "Oui" : "Non",
+          "departure_housing_type": pickupHousingInfo?.type || '',
+          "departure_floor": pickupHousingInfo?.floor || 0,
+          "departure_elevator": pickupHousingInfo?.hasElevator ? "Yes" : "No",
           
-          "Type de logement arrivée": deliveryHousingInfo?.type || '',
-          "Étage arrivée": deliveryHousingInfo?.floor || 0,
-          "Ascenseur arrivée": deliveryHousingInfo?.hasElevator ? "Oui" : "Non",
+          "arrival_housing_type": deliveryHousingInfo?.type || '',
+          "arrival_floor": deliveryHousingInfo?.floor || 0,
+          "arrival_elevator": deliveryHousingInfo?.hasElevator ? "Yes" : "No",
           
           // Motif et exonération
-          "Motif d'envoi": shippingReason === 'moving' ? 'Déménagement' : 'Achat',
-          "Éligible exonération fiscale": taxExemptionEligibility === 'yes' ? 'Oui' : 'Non',
+          "shipping_reason": shippingReason === 'moving' ? 'Moving' : 'Purchase',
+          "tax_exemption": taxExemptionEligibility === 'yes' ? 'Yes' : 'No',
           
           // Objets à expédier avec validation
-          "Effets personnels": shippingItems?.personalBelongings ? "Oui" : "Non",
-          "Volume estimé": personalBelongingsDetails?.estimatedVolume || '',
-          "Description effets personnels": personalBelongingsDetails?.description || '',
-          "Image URL": personalBelongingsDetails?.imageUrl || '',
+          "personal_belongings": shippingItems?.personalBelongings ? "Yes" : "No",
+          "estimated_volume": personalBelongingsDetails?.estimatedVolume || '',
+          "belongings_description": personalBelongingsDetails?.description || '',
+          "image_url": personalBelongingsDetails?.imageUrl || '',
           
           // Véhicules - compteurs
-          "Nombre de véhicules": vehicleCounts.total
+          "vehicles_count": vehicleCounts.total
         };
         
         // Pour éviter les erreurs de champs non attendus, loggons chaque champ individuellement
@@ -680,9 +680,44 @@ app.post('/submit-funnel', async (req, res) => {
           console.log('🎉 SUCCÈS: Données complètes enregistrées dans Airtable!');
           console.log('ID du nouvel enregistrement complet:', completeRecord ? JSON.stringify(completeRecord) : 'Non disponible');
           
-          // Traitement des véhicules si besoin
+          // Si des véhicules sont présents, les enregistrer dans la table véhicules avec son ID spécifique
           if (vehicleDetails && vehicleDetails.length > 0) {
-            // Le code pour traiter les véhicules reste inchangé
+            console.log(`Enregistrement de ${vehicleDetails.length} véhicules dans Airtable...`);
+            
+            const typeMap = {
+              'car': 'Car',
+              'motorcycle': 'Motorcycle',
+              'scooter': 'Scooter',
+              'quad': 'Quad',
+              'boat': 'Boat',
+              'other': 'Other'
+            };
+            
+            const vehiclesTableId = 'tblVffkJ0XQx5wB9L'; // ID spécifique pour les véhicules
+            
+            // Enregistrer chaque véhicule avec la référence de la demande
+            for (const vehicle of vehicleDetails) {
+              try {
+                await base(vehiclesTableId).create([
+                  {
+                    fields: {
+                      "quote_reference": reference,
+                      "vehicle_type": typeMap[vehicle.type || 'other'] || 'Other',
+                      "brand": vehicle.brand || '',
+                      "model": vehicle.model || '',
+                      "dimensions": vehicle.size || '',
+                      "value": vehicle.value || '',
+                      "power": vehicle.power || ''
+                    }
+                  }
+                ]);
+                console.log(`Véhicule ${vehicle.brand} ${vehicle.model} enregistré avec succès`);
+              } catch (vehicleError) {
+                console.error(`Erreur lors de l'enregistrement du véhicule:`, vehicleError.message);
+              }
+            }
+            
+            console.log('Traitement des véhicules terminé');
           }
         } catch (fullRecordError) {
           console.error('❌ ERREUR avec les données complètes:', fullRecordError);
@@ -709,7 +744,7 @@ app.post('/submit-funnel', async (req, res) => {
         // Tentative fallback avec le nom de table au lieu de l'ID
         try {
           console.log('🔄 TENTATIVE FALLBACK: utilisation du nom de table...');
-          const fallbackRecord = await base('DemandesFunnel').create([
+          const fallbackRecord = await base('Quote Funnel').create([
             {
               fields: simplifiedFields
             }
@@ -717,6 +752,24 @@ app.post('/submit-funnel', async (req, res) => {
           console.log('FALLBACK RÉUSSI:', fallbackRecord);
         } catch (fallbackError) {
           console.error('FALLBACK ÉCHOUÉ:', fallbackError.message);
+          
+          // Dernier fallback avec juste l'ID
+          try {
+            console.log('🔄 DERNIÈRE TENTATIVE: ajout minimal avec uniquement email et référence...');
+            const minimalFields = {
+              "email": contactInfo.email,
+              "id": reference
+            };
+            
+            const minimalRecord = await base(demandesTableId).create([
+              {
+                fields: minimalFields
+              }
+            ]);
+            console.log('ENREGISTREMENT MINIMAL RÉUSSI:', minimalRecord);
+          } catch (minimalError) {
+            console.error('ENREGISTREMENT MINIMAL ÉCHOUÉ:', minimalError.message);
+          }
         }
       }
     } catch (airtableSetupError) {
