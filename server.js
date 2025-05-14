@@ -697,9 +697,9 @@ app.post('/submit-funnel', async (req, res) => {
       
       // Utiliser l'ID direct de la table pour une meilleure robustesse
       try {
-        // Essayer d'abord avec le nom de la table spécifique au funnel
-        const demandesTable = 'DemandesFunnel';
-        await base(demandesTable).create([
+        // Utiliser l'ID direct de la table pour les demandes du funnel
+        const demandesTableId = 'tblic0CaPaaKZwouK'; // ID spécifique pour les demandes du funnel
+        await base(demandesTableId).create([
           {
             fields: {
               // Référence et métadonnées
@@ -765,9 +765,9 @@ app.post('/submit-funnel', async (req, res) => {
             }
           }
         ]);
-        console.log('Données du funnel enregistrées dans Airtable (table DemandesFunnel) avec succès');
+        console.log('Données du funnel enregistrées dans Airtable (table ID tblic0CaPaaKZwouK) avec succès');
         
-        // Si des véhicules sont présents, les enregistrer dans une table séparée
+        // Si des véhicules sont présents, les enregistrer dans la table véhicules avec son ID spécifique
         if (vehicleDetails && vehicleDetails.length > 0) {
           console.log(`Enregistrement de ${vehicleDetails.length} véhicules dans Airtable...`);
           
@@ -780,9 +780,11 @@ app.post('/submit-funnel', async (req, res) => {
             'other': 'Autre'
           };
           
+          const vehiclesTableId = 'tblVffkJ0XQx5wB9L'; // ID spécifique pour les véhicules
+          
           // Enregistrer chaque véhicule avec la référence de la demande
           for (const vehicle of vehicleDetails) {
-            await base('Vehicules').create([
+            await base(vehiclesTableId).create([
               {
                 fields: {
                   "Référence demande": reference,
@@ -797,15 +799,15 @@ app.post('/submit-funnel', async (req, res) => {
             ]);
           }
           
-          console.log('Véhicules enregistrés dans Airtable avec succès');
+          console.log('Véhicules enregistrés dans Airtable (table ID tblVffkJ0XQx5wB9L) avec succès');
         }
         
       } catch (funnelTableError) {
-        console.error('Erreur avec la table spécifique au funnel:', funnelTableError);
+        console.error('Erreur avec les tables spécifiques au funnel:', funnelTableError);
         
-        // Fallback sur une table générique si la table spécifique n'existe pas
+        // Fallback sur les noms de tables en cas d'erreur avec les IDs
         try {
-          await base('Demandes').create([
+          await base('DemandesFunnel').create([
             {
               fields: {
                 "Source": "Funnel",
@@ -824,9 +826,33 @@ app.post('/submit-funnel', async (req, res) => {
               }
             }
           ]);
-          console.log('Données du funnel enregistrées dans Airtable (table générique) avec succès');
-        } catch (genericTableError) {
-          throw new Error(`Échecs multiples: table funnel (${funnelTableError.message}), table générique (${genericTableError.message})`);
+          console.log('Données du funnel enregistrées dans Airtable (fallback sur nom de table) avec succès');
+        } catch (nameTableError) {
+          // Dernier fallback sur la table générique
+          try {
+            await base('Demandes').create([
+              {
+                fields: {
+                  "Source": "Funnel",
+                  "Référence": reference,
+                  "Prénom": contactInfo.firstName,
+                  "Nom": contactInfo.lastName,
+                  "Email": contactInfo.email,
+                  "Téléphone": contactInfo.phone,
+                  "Commentaire": contactInfo.comment || '',
+                  "Adresse Départ": formatAddress(departureAddress),
+                  "Adresse Arrivée": formatAddress(arrivalAddress),
+                  "Date Déménagement": formatMovingDate(),
+                  "Nombre de Véhicules": vehicleCounts.total,
+                  "Volume Estimé": personalBelongingsDetails.estimatedVolume || '',
+                  "Date de Soumission": new Date().toISOString()
+                }
+              }
+            ]);
+            console.log('Données du funnel enregistrées dans Airtable (table générique) avec succès');
+          } catch (genericTableError) {
+            throw new Error(`Échecs multiples: ID tables (${funnelTableError.message}), nom de table (${nameTableError.message}), table générique (${genericTableError.message})`);
+          }
         }
       }
     } catch (airtableError) {
