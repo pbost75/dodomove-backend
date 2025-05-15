@@ -648,19 +648,35 @@ app.post('/submit-funnel', async (req, res) => {
           "moving_start_date": movingDate?.startDate || null,
           "moving_end_date": movingDate?.endDate || null,
           
-          // Méthodes et logements
-          "pickup_method": pickupMethod || '',
-          "pickup_housing_type": pickupHousingInfo?.type || '',
+          // Méthodes et logements (validation pour les champs de sélection)
+          "pickup_method": (pickupMethod === 'home' || pickupMethod === 'port') ? pickupMethod : 'home',
+          
+          // Validation pour les champs de type et conversion en options valides
+          "pickup_housing_type": (() => {
+            // Vérifier si c'est une option valide et la normaliser
+            const validTypes = ['house', 'apartment', 'office', 'other'];
+            const type = pickupHousingInfo?.type || '';
+            return validTypes.includes(type) ? type : null; // Renvoyer null si invalide
+          })(),
+          
           "pickup_housing_floor": pickupHousingInfo?.floor || 0,
           "pickup_housing_has_elevator": pickupHousingInfo?.hasElevator || false,
           
-          "delivery_method": deliveryMethod || '',
-          "delivery_housing_type": deliveryHousingInfo?.type || '',
+          "delivery_method": (deliveryMethod === 'home' || deliveryMethod === 'port') ? deliveryMethod : 'home',
+          
+          // Validation pour les champs de type et conversion en options valides
+          "delivery_housing_type": (() => {
+            // Vérifier si c'est une option valide et la normaliser
+            const validTypes = ['house', 'apartment', 'office', 'other'];
+            const type = deliveryHousingInfo?.type || '';
+            return validTypes.includes(type) ? type : null; // Renvoyer null si invalide
+          })(),
+          
           "delivery_housing_floor": deliveryHousingInfo?.floor || 0,
           "delivery_housing_has_elevator": deliveryHousingInfo?.hasElevator || false,
           
-          // Motif et exonération
-          "shipping_reason": shippingReason || '',
+          // Motif et exonération avec validation pour les champs de sélection
+          "shipping_reason": (shippingReason === 'moving' || shippingReason === 'purchase') ? shippingReason : null,
           "tax_exemption_eligible": taxExemptionEligibility === 'yes' ? true : false,
           
           // Objets à expédier avec validation
@@ -712,84 +728,133 @@ app.post('/submit-funnel', async (req, res) => {
             
             // Vérifier si nous avons un ID de demande valide pour la relation
             console.log('Structure completeRecord:', JSON.stringify(completeRecord));
-            const quoteId = completeRecord && completeRecord[0] && completeRecord[0].id ? [completeRecord[0].id] : null;
-            console.log('quoteId extrait:', quoteId);
             
-            if (!quoteId) {
-              console.warn("⚠️ Impossible de créer des véhicules sans ID de demande valide pour la relation");
+            // Nous devons avoir un ID valide de l'enregistrement principal et il doit être au format attendu
+            let quoteId = null;
+            if (completeRecord && completeRecord[0] && completeRecord[0].id) {
+              quoteId = [completeRecord[0].id]; // Doit être un tableau avec l'ID
+              console.log('quoteId extrait:', JSON.stringify(quoteId));
             } else {
-              // Attendons un peu pour s'assurer que l'enregistrement principal est bien créé dans Airtable
-              console.log("Attente de 1 seconde pour s'assurer que l'enregistrement principal est bien créé...");
-              await new Promise(resolve => setTimeout(resolve, 1000));
-              
-              // Enregistrer chaque véhicule avec la référence de la demande
-              for (const vehicle of vehicleDetails) {
+              console.warn("⚠️ Impossible de créer des véhicules sans ID de demande valide pour la relation");
+              console.error('Structure completeRecord invalide ou inattendue:', JSON.stringify(completeRecord));
+              // Retourner ici pour éviter de traiter les véhicules sans ID valide
+              return res.status(200).json({ 
+                success: true,
+                message: `Demande de devis enregistrée avec succès pour ${contactInfo.email} mais les véhicules n'ont pas pu être enregistrés`,
+                reference: reference,
+                airtableStatus: 'Entrée principale créée, véhicules non créés (ID manquant)'
+              });
+            }
+            
+            // Attendons un peu pour s'assurer que l'enregistrement principal est bien créé dans Airtable
+            console.log("Attente de 1 seconde pour s'assurer que l'enregistrement principal est bien créé...");
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Garde une trace des véhicules réussis/échoués
+            const vehicleResults = {
+              success: 0,
+              failed: 0,
+              errors: []
+            };
+            
+            // Enregistrer chaque véhicule avec la référence de la demande
+            for (const vehicle of vehicleDetails) {
+              try {
+                // Format des dimensions du véhicule si disponible
+                const dimensions = vehicle.size ? vehicle.size.split('×').map(dim => dim.trim()) : [];
+                console.log('Dimensions extraites:', dimensions);
+                
+                // Normaliser le type de véhicule pour s'assurer qu'il est valide
+                const vehicleType = (() => {
+                  const validTypes = ['car', 'motorcycle', 'scooter', 'quad', 'boat', 'other'];
+                  return validTypes.includes(vehicle.type) ? vehicle.type : 'other';
+                })();
+                
+                // Préparer les champs du véhicule à enregistrer
+                const vehicleFields = {
+                  "status": "New",
+                  "quote_id": quoteId,
+                  "type": vehicleType,
+                  "registration": '', // Champ optionnel non fourni actuellement
+                  "brand": vehicle.brand || '',
+                  "model": vehicle.model || '',
+                  "value": parseFloat(vehicle.value) || 0,
+                  "year": '', // Champ optionnel non fourni actuellement
+                  "length": dimensions[0] || '', // Optionnel - première dimension si disponible
+                  "width": dimensions[1] || '',  // Optionnel - deuxième dimension si disponible
+                  "height": dimensions[2] || '', // Optionnel - troisième dimension si disponible
+                  "weight": ''  // Champ optionnel non fourni actuellement
+                };
+                
+                console.log(`Tentative d'enregistrement du véhicule ${vehicle.brand} ${vehicle.model}`);
+                console.log('Champs du véhicule:', JSON.stringify(vehicleFields));
+                console.log('Quote ID utilisé:', quoteId);
+                
+                // Créer l'enregistrement du véhicule dans Airtable
+                const vehicleRecord = await base(vehiclesTableId).create([
+                  {
+                    fields: vehicleFields
+                  }
+                ]);
+                
+                vehicleResults.success++;
+                console.log(`Véhicule ${vehicle.brand} ${vehicle.model} enregistré avec succès`);
+                console.log('ID du véhicule:', vehicleRecord ? JSON.stringify(vehicleRecord) : 'Non disponible');
+              } catch (vehicleError) {
+                vehicleResults.failed++;
+                vehicleResults.errors.push(vehicleError.message);
+                
+                console.error(`Erreur lors de l'enregistrement du véhicule:`, vehicleError.message);
+                console.error(`Détails de l'erreur:`, vehicleError);
+                
+                // Tentative avec uniquement les champs essentiels
                 try {
-                  // Format des dimensions du véhicule si disponible
-                  const dimensions = vehicle.size ? vehicle.size.split('×').map(dim => dim.trim()) : [];
-                  console.log('Dimensions extraites:', dimensions);
+                  console.log('Tentative avec champs minimaux...');
+                  console.log('Quote ID utilisé (minimal):', quoteId);
                   
-                  // Préparer les champs du véhicule à enregistrer
-                  const vehicleFields = {
-                    "status": "New",
-                    "quote_id": quoteId,
-                    "type": vehicle.type || '',
-                    "registration": '', // Champ optionnel non fourni actuellement
-                    "brand": vehicle.brand || '',
-                    "model": vehicle.model || '',
-                    "value": parseFloat(vehicle.value) || 0,
-                    "year": '', // Champ optionnel non fourni actuellement
-                    "length": dimensions[0] || '', // Optionnel - première dimension si disponible
-                    "width": dimensions[1] || '',  // Optionnel - deuxième dimension si disponible
-                    "height": dimensions[2] || '', // Optionnel - troisième dimension si disponible
-                    "weight": ''  // Champ optionnel non fourni actuellement
-                  };
-                  
-                  console.log(`Tentative d'enregistrement du véhicule ${vehicle.brand} ${vehicle.model}`);
-                  console.log('Champs du véhicule:', JSON.stringify(vehicleFields));
-                  console.log('Quote ID utilisé:', quoteId);
-                  
-                  // Créer l'enregistrement du véhicule dans Airtable
-                  const vehicleRecord = await base(vehiclesTableId).create([
+                  const minimalVehicleRecord = await base(vehiclesTableId).create([
                     {
-                      fields: vehicleFields
+                      fields: {
+                        "status": "New",
+                        "quote_id": quoteId,
+                        "type": vehicle.type || 'other',
+                        "brand": vehicle.brand || '',
+                        "model": vehicle.model || ''
+                      }
                     }
                   ]);
                   
-                  console.log(`Véhicule ${vehicle.brand} ${vehicle.model} enregistré avec succès`);
-                  console.log('ID du véhicule:', vehicleRecord ? JSON.stringify(vehicleRecord) : 'Non disponible');
-                } catch (vehicleError) {
-                  console.error(`Erreur lors de l'enregistrement du véhicule:`, vehicleError.message);
-                  console.error(`Détails de l'erreur:`, vehicleError);
+                  vehicleResults.success++; // Comptabiliser comme réussi car la version minimale a fonctionné
+                  vehicleResults.failed--; // Annuler l'échec précédent
                   
-                  // Tentative avec uniquement les champs essentiels
-                  try {
-                    console.log('Tentative avec champs minimaux...');
-                    console.log('Quote ID utilisé (minimal):', quoteId);
-                    
-                    const minimalVehicleRecord = await base(vehiclesTableId).create([
-                      {
-                        fields: {
-                          "status": "New",
-                          "quote_id": quoteId,
-                          "type": vehicle.type || '',
-                          "brand": vehicle.brand || '',
-                          "model": vehicle.model || ''
-                        }
-                      }
-                    ]);
-                    
-                    console.log(`Véhicule ${vehicle.brand} ${vehicle.model} enregistré avec champs minimaux`);
-                    console.log('ID du véhicule (minimal):', minimalVehicleRecord ? JSON.stringify(minimalVehicleRecord) : 'Non disponible');
-                  } catch (minimalVehicleError) {
-                    console.error(`Échec de l'enregistrement minimal du véhicule:`, minimalVehicleError.message);
-                    console.error('Détails complets de l\'erreur:', JSON.stringify(minimalVehicleError));
-                  }
+                  console.log(`Véhicule ${vehicle.brand} ${vehicle.model} enregistré avec champs minimaux`);
+                  console.log('ID du véhicule (minimal):', minimalVehicleRecord ? JSON.stringify(minimalVehicleRecord) : 'Non disponible');
+                } catch (minimalVehicleError) {
+                  console.error(`Échec de l'enregistrement minimal du véhicule:`, minimalVehicleError.message);
+                  console.error('Détails complets de l\'erreur:', JSON.stringify(minimalVehicleError));
                 }
               }
             }
             
             console.log('Traitement des véhicules terminé');
+            console.log('Résumé des véhicules:', JSON.stringify(vehicleResults));
+            
+            // Répondre avec le statut final incluant les résultats des véhicules
+            return res.status(200).json({ 
+              success: true,
+              message: `Demande de devis enregistrée avec succès pour ${contactInfo.email}`,
+              reference: reference,
+              airtableStatus: 'Entrée complète créée',
+              vehicleResults: vehicleResults
+            });
+          } else {
+            // Si pas de véhicules, répondre directement
+            return res.status(200).json({ 
+              success: true,
+              message: `Demande de devis enregistrée avec succès pour ${contactInfo.email}`,
+              reference: reference,
+              airtableStatus: 'Entrée complète créée (pas de véhicules)'
+            });
           }
         } catch (fullRecordError) {
           console.error('❌ ERREUR avec les données complètes:', fullRecordError);
@@ -797,7 +862,16 @@ app.post('/submit-funnel', async (req, res) => {
           if (fullRecordError.error) {
             console.error('Détails de l\'erreur:', JSON.stringify(fullRecordError.error));
           }
+          
           // Nous avons au moins enregistré les données simplifiées, donc on considère ça comme un succès partiel
+          return res.status(200).json({ 
+            success: true,
+            warning: true,
+            message: `Demande de devis partiellement enregistrée pour ${contactInfo.email}`,
+            error: fullRecordError.message,
+            reference: reference,
+            airtableStatus: 'Entrée de base créée, données complètes échouées'
+          });
         }
       } catch (testError) {
         console.error('❌ ÉCHEC DU TEST SIMPLIFIÉ:', testError);
