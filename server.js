@@ -779,7 +779,18 @@ app.post('/submit-funnel', async (req, res) => {
                   "registration": '', // Champ optionnel non fourni actuellement
                   "brand": vehicle.brand || '',
                   "model": vehicle.model || '',
-                  "value": parseFloat(vehicle.value) || 0,
+                  // Traitement spécial pour value - conversion explicite et log détaillé
+                  "value": (() => {
+                    console.log(`Valeur d'origine: "${vehicle.value}" (type: ${typeof vehicle.value})`);
+                    // Nettoyer la valeur si c'est une chaîne (retirer espaces, remplacer virgules par points)
+                    let cleanValue = typeof vehicle.value === 'string' 
+                      ? vehicle.value.replace(/\s/g, '').replace(',', '.') 
+                      : vehicle.value;
+                    // Convertir en nombre
+                    let numValue = Number(cleanValue);
+                    console.log(`Valeur après conversion: ${numValue} (type: ${typeof numValue})`);
+                    return isNaN(numValue) ? 0 : numValue;
+                  })(),
                   "year": '', // Champ optionnel non fourni actuellement
                   "length": dimensions[0] || '', // Optionnel - première dimension si disponible
                   "width": dimensions[1] || '',  // Optionnel - deuxième dimension si disponible
