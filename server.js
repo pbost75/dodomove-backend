@@ -762,7 +762,22 @@ app.post('/submit-funnel', async (req, res) => {
             for (const vehicle of vehicleDetails) {
               try {
                 // Format des dimensions du véhicule si disponible
-                const dimensions = vehicle.size ? vehicle.size.split('×').map(dim => dim.trim()) : [];
+                let dimensions = [];
+                if (vehicle.size) {
+                  console.log(`Dimensions d'origine: "${vehicle.size}" (type: ${typeof vehicle.size})`);
+                  // Essayer différents séparateurs possibles (×, x, *) et afficher le résultat
+                  if (vehicle.size.includes('×')) {
+                    dimensions = vehicle.size.split('×').map(dim => dim.trim());
+                  } else if (vehicle.size.includes('x')) {
+                    dimensions = vehicle.size.split('x').map(dim => dim.trim());
+                  } else if (vehicle.size.includes('*')) {
+                    dimensions = vehicle.size.split('*').map(dim => dim.trim());
+                  } else {
+                    // Si aucun séparateur trouvé, traiter comme une seule dimension
+                    dimensions = [vehicle.size.trim()];
+                  }
+                  console.log('Dimensions après split:', JSON.stringify(dimensions));
+                }
                 console.log('Dimensions extraites:', dimensions);
                 
                 // Normaliser le type de véhicule pour s'assurer qu'il est valide
@@ -793,10 +808,29 @@ app.post('/submit-funnel', async (req, res) => {
                   })(),
                   // Pour les champs numériques, utiliser null plutôt qu'une chaîne vide
                   "year": null, // Champ optionnel non fourni actuellement
-                  "length": dimensions[0] || '', // Optionnel - première dimension si disponible
-                  "width": dimensions[1] || '',  // Optionnel - deuxième dimension si disponible
-                  "height": dimensions[2] || '', // Optionnel - troisième dimension si disponible
-                  "weight": '',  // Champ optionnel non fourni actuellement
+                  // Traitement des dimensions comme des nombres
+                  "length": (() => {
+                    const dim = dimensions[0];
+                    if (!dim) return null;
+                    const cleanDim = typeof dim === 'string' ? dim.replace(/\s/g, '').replace(',', '.') : dim;
+                    const numValue = Number(cleanDim);
+                    return isNaN(numValue) ? null : numValue;
+                  })(),
+                  "width": (() => {
+                    const dim = dimensions[1];
+                    if (!dim) return null;
+                    const cleanDim = typeof dim === 'string' ? dim.replace(/\s/g, '').replace(',', '.') : dim;
+                    const numValue = Number(cleanDim);
+                    return isNaN(numValue) ? null : numValue;
+                  })(),
+                  "height": (() => {
+                    const dim = dimensions[2];
+                    if (!dim) return null;
+                    const cleanDim = typeof dim === 'string' ? dim.replace(/\s/g, '').replace(',', '.') : dim;
+                    const numValue = Number(cleanDim);
+                    return isNaN(numValue) ? null : numValue;
+                  })(),
+                  "weight": null,  // Utiliser null pour ce champ numérique vide
                   "reference": reference  // Ajouter la même référence pour lier avec l'entrée principale
                 };
                 
