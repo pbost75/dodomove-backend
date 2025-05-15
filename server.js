@@ -618,6 +618,7 @@ app.post('/submit-funnel', async (req, res) => {
           // Métadonnées
           // "created_at": new Date().toISOString(), // Supprimé car c'est un champ calculé par Airtable
           "status": "New",
+          "reference": reference, // Stockage de la référence dans Airtable
           
           // Informations de contact (déjà validées)
           "contact_first_name": contactInfo.firstName,
@@ -783,7 +784,8 @@ app.post('/submit-funnel', async (req, res) => {
                   "length": dimensions[0] || '', // Optionnel - première dimension si disponible
                   "width": dimensions[1] || '',  // Optionnel - deuxième dimension si disponible
                   "height": dimensions[2] || '', // Optionnel - troisième dimension si disponible
-                  "weight": ''  // Champ optionnel non fourni actuellement
+                  "weight": '',  // Champ optionnel non fourni actuellement
+                  "reference": reference  // Ajouter la même référence pour lier avec l'entrée principale
                 };
                 
                 console.log(`Tentative d'enregistrement du véhicule ${vehicle.brand} ${vehicle.model}`);
@@ -819,7 +821,8 @@ app.post('/submit-funnel', async (req, res) => {
                         "quote_id": quoteId,
                         "type": vehicle.type || 'other',
                         "brand": vehicle.brand || '',
-                        "model": vehicle.model || ''
+                        "model": vehicle.model || '',
+                        "reference": reference // Ajouter la référence aussi pour la version minimale
                       }
                     }
                   ]);
