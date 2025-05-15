@@ -791,7 +791,8 @@ app.post('/submit-funnel', async (req, res) => {
                     console.log(`Valeur après conversion: ${numValue} (type: ${typeof numValue})`);
                     return isNaN(numValue) ? 0 : numValue;
                   })(),
-                  "year": '', // Champ optionnel non fourni actuellement
+                  // Pour les champs numériques, utiliser null plutôt qu'une chaîne vide
+                  "year": null, // Champ optionnel non fourni actuellement
                   "length": dimensions[0] || '', // Optionnel - première dimension si disponible
                   "width": dimensions[1] || '',  // Optionnel - deuxième dimension si disponible
                   "height": dimensions[2] || '', // Optionnel - troisième dimension si disponible
@@ -833,6 +834,8 @@ app.post('/submit-funnel', async (req, res) => {
                         "type": vehicle.type || 'other',
                         "brand": vehicle.brand || '',
                         "model": vehicle.model || '',
+                        "value": typeof vehicle.value === 'number' ? vehicle.value : 
+                                (typeof vehicle.value === 'string' ? Number(vehicle.value.replace(/\s/g, '').replace(',', '.')) : 0),
                         "reference": reference // Ajouter la référence aussi pour la version minimale
                       }
                     }
