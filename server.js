@@ -503,30 +503,21 @@ app.post('/submit-funnel', async (req, res) => {
       const demandesTableId = 'tblic0CaPaaKZwouK'; // ID spécifique pour les demandes du funnel
       console.log('Tentative d\'enregistrement SIMPLIFIÉ dans Airtable avec l\'ID de table:', demandesTableId);
       
-      // -------------------------------------------------------
-      // SIMPLIFIÉ: Juste les champs essentiels pour le test
-      // -------------------------------------------------------
-      const simplifiedFields = {
-        // "created_at": new Date().toISOString(), // Supprimé car c'est un champ calculé par Airtable
-        "status": "New",
-        "contact_first_name": contactInfo.firstName,
-        "contact_last_name": contactInfo.lastName,
-        "contact_email": contactInfo.email
-      };
+      // Au lieu de créer un enregistrement de test, vérifions simplement la connexion à Airtable
+      console.log('Vérification de la connexion à Airtable...');
       
-      console.log('Champs SIMPLIFIÉS pour Airtable:', JSON.stringify(simplifiedFields));
-      
-      // Essai d'enregistrement avec gestion d'erreur détaillée
-      let testRecord;
       try {
-        testRecord = await base(demandesTableId).create([
-          {
-            fields: simplifiedFields
-          }
-        ]);
+        // Vérifier la connexion à Airtable en listant un seul enregistrement
+        // Cela permet de tester la connexion sans créer d'enregistrement de test
+        await base(demandesTableId).select({
+          maxRecords: 1,
+          view: "Grid view"
+        }).firstPage();
         
-        console.log('TEST SIMPLIFIÉ RÉUSSI: Airtable a accepté les données simplifiées!');
-        console.log('ID du nouvel enregistrement:', testRecord ? JSON.stringify(testRecord) : 'Non disponible');
+        console.log('✅ TEST RÉUSSI: Connexion à Airtable vérifiée!');
+        
+        // Si nous arrivons ici, la connexion à Airtable est établie,
+        // nous pouvons préparer l'enregistrement complet
         
         // Si le test simplifié réussit, nous pouvons poursuivre avec l'enregistrement complet
         console.log('Préparation des champs complets...');
@@ -938,36 +929,25 @@ app.post('/submit-funnel', async (req, res) => {
           console.error('Code de statut HTTP:', testError.statusCode);
         }
         
-        // Tentative fallback avec le nom de table au lieu de l'ID
-        try {
-          console.log('🔄 TENTATIVE FALLBACK: utilisation du nom de table...');
-          const fallbackRecord = await base('Quote Funnel').create([
-            {
-              fields: simplifiedFields
-            }
-          ]);
-          console.log('FALLBACK RÉUSSI:', fallbackRecord);
-        } catch (fallbackError) {
-          console.error('FALLBACK ÉCHOUÉ:', fallbackError.message);
-          
-          // Dernier fallback avec juste l'ID
+                  // Tentative fallback avec le nom de table au lieu de l'ID pour vérifier la connexion
           try {
-            console.log('🔄 DERNIÈRE TENTATIVE: ajout minimal avec uniquement email...');
-            const minimalFields = {
-              "contact_email": contactInfo.email
-              // "created_at": new Date().toISOString() // Supprimé car c'est un champ calculé par Airtable
-            };
-            
-            const minimalRecord = await base(demandesTableId).create([
-              {
-                fields: minimalFields
-              }
-            ]);
-            console.log('ENREGISTREMENT MINIMAL RÉUSSI:', minimalRecord);
-          } catch (minimalError) {
-            console.error('ENREGISTREMENT MINIMAL ÉCHOUÉ:', minimalError.message);
+            console.log('🔄 TENTATIVE FALLBACK: vérification avec le nom de table...');
+            // Au lieu de créer un enregistrement, juste vérifier l'accès
+            await base('Quote Funnel').select({
+              maxRecords: 1,
+              view: "Grid view"
+            }).firstPage();
+            console.log('FALLBACK RÉUSSI: Connexion vérifiée avec le nom de table');
+          } catch (fallbackError) {
+            console.error('FALLBACK ÉCHOUÉ:', fallbackError.message);
+            console.error('Impossible de se connecter à Airtable, abandon de l\'enregistrement');
+            return res.status(500).json({
+              success: false,
+              error: 'Erreur de connexion à Airtable',
+              details: fallbackError.message,
+              reference: reference
+            });
           }
-        }
       }
     } catch (airtableSetupError) {
       console.error('ERREUR DE CONFIGURATION AIRTABLE:', airtableSetupError);
