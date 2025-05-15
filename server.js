@@ -718,6 +718,10 @@ app.post('/submit-funnel', async (req, res) => {
             if (!quoteId) {
               console.warn("⚠️ Impossible de créer des véhicules sans ID de demande valide pour la relation");
             } else {
+              // Attendons un peu pour s'assurer que l'enregistrement principal est bien créé dans Airtable
+              console.log("Attente de 1 seconde pour s'assurer que l'enregistrement principal est bien créé...");
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              
               // Enregistrer chaque véhicule avec la référence de la demande
               for (const vehicle of vehicleDetails) {
                 try {
@@ -743,20 +747,27 @@ app.post('/submit-funnel', async (req, res) => {
                   
                   console.log(`Tentative d'enregistrement du véhicule ${vehicle.brand} ${vehicle.model}`);
                   console.log('Champs du véhicule:', JSON.stringify(vehicleFields));
+                  console.log('Quote ID utilisé:', quoteId);
                   
-                  await base(vehiclesTableId).create([
+                  // Créer l'enregistrement du véhicule dans Airtable
+                  const vehicleRecord = await base(vehiclesTableId).create([
                     {
                       fields: vehicleFields
                     }
                   ]);
+                  
                   console.log(`Véhicule ${vehicle.brand} ${vehicle.model} enregistré avec succès`);
+                  console.log('ID du véhicule:', vehicleRecord ? JSON.stringify(vehicleRecord) : 'Non disponible');
                 } catch (vehicleError) {
                   console.error(`Erreur lors de l'enregistrement du véhicule:`, vehicleError.message);
                   console.error(`Détails de l'erreur:`, vehicleError);
                   
                   // Tentative avec uniquement les champs essentiels
                   try {
-                    await base(vehiclesTableId).create([
+                    console.log('Tentative avec champs minimaux...');
+                    console.log('Quote ID utilisé (minimal):', quoteId);
+                    
+                    const minimalVehicleRecord = await base(vehiclesTableId).create([
                       {
                         fields: {
                           "status": "New",
@@ -767,9 +778,12 @@ app.post('/submit-funnel', async (req, res) => {
                         }
                       }
                     ]);
+                    
                     console.log(`Véhicule ${vehicle.brand} ${vehicle.model} enregistré avec champs minimaux`);
+                    console.log('ID du véhicule (minimal):', minimalVehicleRecord ? JSON.stringify(minimalVehicleRecord) : 'Non disponible');
                   } catch (minimalVehicleError) {
                     console.error(`Échec de l'enregistrement minimal du véhicule:`, minimalVehicleError.message);
+                    console.error('Détails complets de l\'erreur:', JSON.stringify(minimalVehicleError));
                   }
                 }
               }
