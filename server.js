@@ -426,8 +426,26 @@ app.post('/submit-funnel', async (req, res) => {
       // Nouveaux formats de données (format Airtable)
       addressFormat,
       dateFormat,
-      vehiclesFormat
+      vehiclesFormat,
+      // Nouvelles données du funnel
+      belongingsPhotos
     } = req.body;
+    
+    console.log('Vérification des nouveaux champs du funnel:');
+    console.log('- personnalBelongingsDetails:', !!personalBelongingsDetails);
+    if (personalBelongingsDetails) {
+      console.log('  - knowsVolume:', personalBelongingsDetails.knowsVolume);
+      console.log('  - housingSize:', personalBelongingsDetails.housingSize);
+      console.log('  - movingScope:', personalBelongingsDetails.movingScope);
+      console.log('  - estimatedVolume:', personalBelongingsDetails.estimatedVolume);
+      console.log('  - description:', !!personalBelongingsDetails.description);
+    }
+    console.log('- belongingsPhotos:', !!belongingsPhotos);
+    if (belongingsPhotos) {
+      console.log('  - hasPhotos:', belongingsPhotos.hasPhotos);
+      console.log('  - photoUrls:', Array.isArray(belongingsPhotos.photoUrls) ? 
+        `Array de ${belongingsPhotos.photoUrls.length} photos` : 'Non disponible');
+    }
     
     // Support pour le nouveau format de données
     if (addressFormat) {
@@ -674,16 +692,33 @@ app.post('/submit-funnel', async (req, res) => {
           // Objets à expédier avec validation
           "has_personal_belongings": shippingItems?.personalBelongings || false,
           "has_vehicles": shippingItems?.vehicles || false,
-          "personal_belongings_volume": personalBelongingsDetails?.estimatedVolume || '',
-          "personal_belongings_details": personalBelongingsDetails?.description || '',
-          "belongings_photos": personalBelongingsDetails?.imageUrl || '',
+          
+          // NOUVEAUX CHAMPS pour les étapes intermédiaires du funnel (Volume et Item Details)
+          // Volume Knowledge
+          "knowsVolume": personalBelongingsDetails?.knowsVolume || false,
+          "userEstimatedVolume": personalBelongingsDetails?.knowsVolume ? 
+            personalBelongingsDetails?.estimatedVolume : '',
+          
+          // Volume Estimation
+          "housingSize": personalBelongingsDetails?.housingSize || '',
+          "movingScope": personalBelongingsDetails?.movingScope || '',
+          "calculatedVolume": !personalBelongingsDetails?.knowsVolume ? 
+            personalBelongingsDetails?.estimatedVolume : '',
+          
+          // Item Details
+          "itemDetails_description": personalBelongingsDetails?.description || '',
           
           // Véhicules - compteurs
           "vehicles_count_total": vehicleCounts.total,
           "vehicles_count_cars": vehicleCounts.car,
           "vehicles_count_motorcycles": vehicleCounts.motorcycle,
           "vehicles_count_boats": vehicleCounts.boat,
-          "vehicles_count_other": vehicleCounts.other
+          "vehicles_count_other": vehicleCounts.other,
+          
+          // Belongings Photos (après les véhicules comme demandé)
+          "hasPhotos": req.body.belongingsPhotos?.hasPhotos || false,
+          "belongings_photos_urls": Array.isArray(req.body.belongingsPhotos?.photoUrls) ? 
+            JSON.stringify(req.body.belongingsPhotos?.photoUrls) : ''
         };
         
         // Pour éviter les erreurs de champs non attendus, loggons chaque champ individuellement
