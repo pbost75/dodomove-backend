@@ -719,9 +719,10 @@ app.post('/submit-funnel', async (req, res) => {
           "vehicles_count_other": vehicleCounts.other,
           
           // Belongings Photos (après les véhicules comme demandé)
-          "hasPhotos": req.body.belongingsPhotos?.hasPhotos || false,
+          // Commenté temporairement car les champs liés aux photos ne sont pas configurés dans Airtable
+          /*"hasPhotos": req.body.belongingsPhotos?.hasPhotos || false,
           "belongings_photos_urls": Array.isArray(req.body.belongingsPhotos?.photoUrls) ? 
-            JSON.stringify(req.body.belongingsPhotos?.photoUrls) : ''
+            JSON.stringify(req.body.belongingsPhotos?.photoUrls) : ''*/
         };
         
         // Ajouter userEstimatedVolume UNIQUEMENT si knowsVolume est true
