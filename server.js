@@ -698,8 +698,32 @@ app.post('/submit-funnel', async (req, res) => {
           "knowsVolume": personalBelongingsDetails?.knowsVolume || false,
           
           // Volume Estimation
-          "housingSize": personalBelongingsDetails?.housingSize || '',
-          "movingScope": personalBelongingsDetails?.movingScope || '',
+          "housingSize": (() => {
+            // Convertir les valeurs de l'application en options valides Airtable
+            // En français: le nombre inclut le salon + chambres
+            // En anglais: on compte uniquement les chambres (bedroom)
+            const sizeMap = {
+              'studio': 'Studio',
+              '1piece': 'Studio',  // Cas rare en France
+              '2pieces': '1-bedroom', // 1 salon + 1 chambre
+              '3pieces': '2-bedroom', // 1 salon + 2 chambres
+              '4pieces': '3-bedroom', // 1 salon + 3 chambres
+              '5pieces': '4-bedroom', // 1 salon + 4 chambres
+              '6pieces': '5+ bedrooms' // 1 salon + 5 chambres ou plus
+            };
+            const size = personalBelongingsDetails?.housingSize || '';
+            return sizeMap[size] || size; // Si pas trouvé, garder la valeur d'origine
+          })(),
+          "movingScope": (() => {
+            // Convertir les valeurs de l'application en options valides Airtable
+            const scopeMap = {
+              'full': 'full',
+              'partial': 'partial',
+              'boxes': 'boxes'
+            };
+            const scope = personalBelongingsDetails?.movingScope || '';
+            return scopeMap[scope] || scope; // Si pas trouvé, garder la valeur d'origine
+          })(),
           "calculatedVolume": !personalBelongingsDetails?.knowsVolume ? 
             (() => {
               const value = personalBelongingsDetails?.estimatedVolume;
