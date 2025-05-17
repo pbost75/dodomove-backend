@@ -712,7 +712,8 @@ app.post('/submit-funnel', async (req, res) => {
               '6pieces': '5+ bedrooms' // 1 salon + 5 chambres ou plus
             };
             const size = personalBelongingsDetails?.housingSize || '';
-            return sizeMap[size] || size; // Si pas trouvé, garder la valeur d'origine
+            // Si la taille est vide, ne pas inclure ce champ du tout
+            return size ? (sizeMap[size] || size) : undefined;
           })(),
           "movingScope": (() => {
             // Convertir les valeurs de l'application en options valides Airtable
@@ -722,7 +723,8 @@ app.post('/submit-funnel', async (req, res) => {
               'boxes': 'boxes'
             };
             const scope = personalBelongingsDetails?.movingScope || '';
-            return scopeMap[scope] || scope; // Si pas trouvé, garder la valeur d'origine
+            // Si le scope est vide, ne pas inclure ce champ du tout
+            return scope ? (scopeMap[scope] || scope) : undefined;
           })(),
           "calculatedVolume": !personalBelongingsDetails?.knowsVolume ? 
             (() => {
@@ -762,6 +764,14 @@ app.post('/submit-funnel', async (req, res) => {
         // Pour éviter les erreurs de champs non attendus, loggons chaque champ individuellement
         Object.keys(fields).forEach(key => {
           console.log(`Champ: "${key}" = ${fields[key]}`);
+        });
+        
+        // Supprimer les propriétés avec des valeurs undefined
+        Object.keys(fields).forEach(key => {
+          if (fields[key] === undefined) {
+            console.log(`Suppression du champ "${key}" car sa valeur est undefined`);
+            delete fields[key];
+          }
         });
         
         // Avec le test simplifié réussi, on peut maintenant envoyer les données complètes
