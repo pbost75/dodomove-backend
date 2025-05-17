@@ -696,14 +696,17 @@ app.post('/submit-funnel', async (req, res) => {
           // NOUVEAUX CHAMPS pour les étapes intermédiaires du funnel (Volume et Item Details)
           // Volume Knowledge
           "knowsVolume": personalBelongingsDetails?.knowsVolume || false,
-          "userEstimatedVolume": personalBelongingsDetails?.knowsVolume ? 
-            personalBelongingsDetails?.estimatedVolume : '',
           
           // Volume Estimation
           "housingSize": personalBelongingsDetails?.housingSize || '',
           "movingScope": personalBelongingsDetails?.movingScope || '',
           "calculatedVolume": !personalBelongingsDetails?.knowsVolume ? 
-            personalBelongingsDetails?.estimatedVolume : '',
+            (() => {
+              const value = personalBelongingsDetails?.estimatedVolume;
+              if (value === undefined || value === null || value === '') return 0;
+              const numValue = Number(value);
+              return isNaN(numValue) ? 0 : numValue;
+            })() : 0,
           
           // Item Details
           "itemDetails_description": personalBelongingsDetails?.description || '',
@@ -720,6 +723,16 @@ app.post('/submit-funnel', async (req, res) => {
           "belongings_photos_urls": Array.isArray(req.body.belongingsPhotos?.photoUrls) ? 
             JSON.stringify(req.body.belongingsPhotos?.photoUrls) : ''
         };
+        
+        // Ajouter userEstimatedVolume UNIQUEMENT si knowsVolume est true
+        if (personalBelongingsDetails?.knowsVolume) {
+          fields.userEstimatedVolume = (() => {
+            const value = personalBelongingsDetails?.estimatedVolume;
+            if (value === undefined || value === null || value === '') return 0;
+            const numValue = Number(value);
+            return isNaN(numValue) ? 0 : numValue;
+          })();
+        }
         
         // Pour éviter les erreurs de champs non attendus, loggons chaque champ individuellement
         Object.keys(fields).forEach(key => {
