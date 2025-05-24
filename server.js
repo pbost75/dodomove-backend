@@ -1107,59 +1107,59 @@ app.get('/request/:id', async (req, res) => {
     const requestDetails = {
       id: record.id,
       reference: record.fields['reference'] || id,
-      firstName: record.fields['Prénom'] || '',
-      lastName: record.fields['Nom'] || '',
-      email: record.fields['Email'] || '',
-      phoneNumber: record.fields['Téléphone'] || '',
-      submitDate: record.fields['Date de soumission'] || new Date().toISOString(),
-      status: mapAirtableStatusToApi(record.fields['Statut'] || 'Nouveau'),
+      firstName: record.fields['contact_first_name'] || '',
+      lastName: record.fields['contact_last_name'] || '',
+      email: record.fields['contact_email'] || '',
+      phoneNumber: record.fields['contact_phone'] || '',
+      submitDate: record.fields['created_at'] || new Date().toISOString(),
+      status: mapAirtableStatusToApi(record.fields['status'] || 'New'),
       
       departureAddress: {
-        street: record.fields['Adresse de départ'] || '',
-        city: record.fields['Ville de départ'] || '',
-        zipCode: record.fields['Code postal départ'] || '',
-        country: record.fields['Pays de départ'] || 'France',
+        street: record.fields['departure_street'] || '',
+        city: record.fields['departure_city'] || '',
+        zipCode: record.fields['departure_postal_code'] || '',
+        country: record.fields['departure_country'] || 'France',
       },
       
       arrivalAddress: {
-        street: record.fields['Adresse d\'arrivée'] || '',
-        city: record.fields['Ville d\'arrivée'] || '',
-        zipCode: record.fields['Code postal arrivée'] || '',
-        country: record.fields['Pays d\'arrivée'] || '',
-        isApproximate: record.fields['Adresse arrivée approximative'] === true,
+        street: record.fields['arrival_street'] || '',
+        city: record.fields['arrival_city'] || '',
+        zipCode: record.fields['arrival_postal_code'] || '',
+        country: record.fields['arrival_country'] || '',
+        isApproximate: record.fields['arrival_unknown_exact_address'] === true,
       },
       
       movingDate: {
-        type: (record.fields['Type de date'] || '').toLowerCase() === 'exacte' ? 'exact' : 'flexible',
-        exactDate: record.fields['Date exacte'] || null,
-        flexibleStartDate: record.fields['Date début'] || null,
-        flexibleEndDate: record.fields['Date fin'] || null,
+        type: record.fields['moving_is_flexible'] === true ? 'flexible' : 'exact',
+        exactDate: record.fields['moving_exact_date'] || null,
+        flexibleStartDate: record.fields['moving_start_date'] || null,
+        flexibleEndDate: record.fields['moving_end_date'] || null,
       },
       
-      pickupMethod: (record.fields['Méthode de ramassage'] || '').toLowerCase() === 'domicile' ? 'domicile' : 'port',
-      deliveryMethod: (record.fields['Méthode de livraison'] || '').toLowerCase() === 'domicile' ? 'domicile' : 'port',
+      pickupMethod: (record.fields['pickup_method'] || '').toLowerCase() === 'home' ? 'domicile' : 'port',
+      deliveryMethod: (record.fields['delivery_method'] || '').toLowerCase() === 'home' ? 'domicile' : 'port',
       
-      departureHousing: record.fields['Type de logement départ'] || '',
-      departureFloor: record.fields['Étage départ'] || 0,
-      departureElevator: record.fields['Ascenseur départ'] === true,
+      departureHousing: record.fields['pickup_housing_type'] || '',
+      departureFloor: record.fields['pickup_housing_floor'] || 0,
+      departureElevator: record.fields['pickup_housing_has_elevator'] === true,
       
-      arrivalHousing: record.fields['Type de logement arrivée'] || '',
-      arrivalFloor: record.fields['Étage arrivée'] || 0,
-      arrivalElevator: record.fields['Ascenseur arrivée'] === true,
+      arrivalHousing: record.fields['delivery_housing_type'] || '',
+      arrivalFloor: record.fields['delivery_housing_floor'] || 0,
+      arrivalElevator: record.fields['delivery_housing_has_elevator'] === true,
       
-      purpose: record.fields['Motif d\'envoi'] || '',
-      taxExemption: record.fields['Éligible exonération fiscale'] || 'Non',
+      purpose: record.fields['shipping_reason'] || '',
+      taxExemption: record.fields['tax_exemption_eligible'] === true ? 'Oui' : 'Non',
       
-      hasPersonalEffects: record.fields['Effets personnels'] === true,
-      estimatedVolume: record.fields['Volume estimé'] || 0,
-      personalEffectsDescription: record.fields['Description effets personnels'] || '',
-      imageUrl: record.fields['Image URL'] || '',
+      hasPersonalEffects: record.fields['has_personal_belongings'] === true,
+      estimatedVolume: record.fields['calculatedVolume'] || record.fields['userEstimatedVolume'] || 0,
+      personalEffectsDescription: record.fields['itemDetails_description'] || '',
+      imageUrl: '', // Ce champ n'existe pas encore dans Airtable
       
-      hasVehicles: (record.fields['Nombre de véhicules'] || 0) > 0,
-      vehiclesCount: record.fields['Nombre de véhicules'] || 0,
+      hasVehicles: record.fields['has_vehicles'] === true,
+      vehiclesCount: record.fields['vehicles_count_total'] || 0,
       vehicles: vehicles,
       
-      comment: record.fields['Commentaire'] || '',
+      comment: record.fields['attached_note'] || '',
     };
     
     res.json(requestDetails);
@@ -1172,12 +1172,13 @@ app.get('/request/:id', async (req, res) => {
 // Fonction pour mapper les statuts Airtable vers les statuts API
 function mapAirtableStatusToApi(airtableStatus) {
   const statusMap = {
-    'Nouveau': 'verification',
-    'En cours': 'verification',
-    'Vérifié': 'transmise',
-    'Transmis': 'transmise',
-    'Devis envoyés': 'choix',
-    'Terminé': 'complete'
+    'New': 'verification',
+    'Verification': 'verification', 
+    'In Progress': 'verification',
+    'Verified': 'transmise',
+    'Transmitted': 'transmise',
+    'Quotes Sent': 'choix',
+    'Completed': 'complete'
   };
   
   return statusMap[airtableStatus] || 'verification';
