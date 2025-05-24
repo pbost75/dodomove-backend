@@ -1088,18 +1088,23 @@ app.get('/request/:id', async (req, res) => {
     
     // Récupérer les détails des véhicules associés (si nécessaire)
     let vehicles = [];
-    if (record.fields['Nombre de véhicules'] > 0) {
+    if (record.fields['vehicles_count_total'] > 0) {
       const vehicleRecords = await base(vehiclesTable).select({
-        filterByFormula: `{Demande} = '${record.id}'`
+        filterByFormula: `{quote_id} = '${record.id}'`
       }).firstPage();
       
       vehicles = vehicleRecords.map(vr => ({
-        type: vr.fields['Type de véhicule'] || '',
-        brand: vr.fields['Marque'] || '',
-        model: vr.fields['Modèle'] || '',
-        dimensions: vr.fields['Dimensions'] || '',
-        value: vr.fields['Valeur'] || 0,
-        power: vr.fields['Puissance (CV)'] || 0
+        type: vr.fields['type'] || '',
+        brand: vr.fields['brand'] || '',
+        model: vr.fields['model'] || '',
+        dimensions: [
+          vr.fields['length'] || 0,
+          vr.fields['width'] || 0, 
+          vr.fields['height'] || 0
+        ].filter(dim => dim > 0).join(' x '), // Reconstituer les dimensions
+        value: vr.fields['value'] || 0,
+        registration: vr.fields['registration'] || '',
+        year: vr.fields['year'] || null
       }));
     }
     
