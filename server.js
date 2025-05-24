@@ -1054,6 +1054,135 @@ app.post('/submit-funnel', async (req, res) => {
   }
 });
 
+// Route pour récupérer les détails d'une demande par ID ou référence
+app.get('/request/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({ error: 'ID ou référence manquant' });
+    }
+    
+    // Valider que l'API key et l'ID de base Airtable sont configurés
+    if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
+      console.error('Configuration Airtable manquante');
+      return res.status(500).json({ error: 'Erreur de configuration serveur' });
+    }
+    
+    // Configuration Airtable
+    const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
+    const quoteFunnelTable = process.env.AIRTABLE_TABLE_NAME || 'Quote Funnel';
+    const vehiclesTable = process.env.AIRTABLE_VEHICLES_TABLE_NAME || 'Quote Funnel - Vehicles details';
+    
+    // Recherche par ID ou référence dans Airtable
+    const records = await base(quoteFunnelTable).select({
+      filterByFormula: `OR({ID} = '${id}', {Référence} = '${id}')`,
+      maxRecords: 1
+    }).firstPage();
+    
+    if (!records || records.length === 0) {
+      return res.status(404).json({ error: 'Demande non trouvée' });
+    }
+    
+    const record = records[0];
+    
+    // Récupérer les détails des véhicules associés (si nécessaire)
+    let vehicles = [];
+    if (record.fields['Nombre de véhicules'] > 0) {
+      const vehicleRecords = await base(vehiclesTable).select({
+        filterByFormula: `{Demande} = '${record.id}'`
+      }).firstPage();
+      
+      vehicles = vehicleRecords.map(vr => ({
+        type: vr.fields['Type de véhicule'] || '',
+        brand: vr.fields['Marque'] || '',
+        model: vr.fields['Modèle'] || '',
+        dimensions: vr.fields['Dimensions'] || '',
+        value: vr.fields['Valeur'] || 0,
+        power: vr.fields['Puissance (CV)'] || 0
+      }));
+    }
+    
+    // Mapper les données d'Airtable vers le format attendu par le frontend
+    const requestDetails = {
+      id: record.id,
+      reference: record.fields['Référence'] || id,
+      firstName: record.fields['Prénom'] || '',
+      lastName: record.fields['Nom'] || '',
+      email: record.fields['Email'] || '',
+      phoneNumber: record.fields['Téléphone'] || '',
+      submitDate: record.fields['Date de soumission'] || new Date().toISOString(),
+      status: mapAirtableStatusToApi(record.fields['Statut'] || 'Nouveau'),
+      
+      departureAddress: {
+        street: record.fields['Adresse de départ'] || '',
+        city: record.fields['Ville de départ'] || '',
+        zipCode: record.fields['Code postal départ'] || '',
+        country: record.fields['Pays de départ'] || 'France',
+      },
+      
+      arrivalAddress: {
+        street: record.fields['Adresse d\'arrivée'] || '',
+        city: record.fields['Ville d\'arrivée'] || '',
+        zipCode: record.fields['Code postal arrivée'] || '',
+        country: record.fields['Pays d\'arrivée'] || '',
+        isApproximate: record.fields['Adresse arrivée approximative'] === true,
+      },
+      
+      movingDate: {
+        type: (record.fields['Type de date'] || '').toLowerCase() === 'exacte' ? 'exact' : 'flexible',
+        exactDate: record.fields['Date exacte'] || null,
+        flexibleStartDate: record.fields['Date début'] || null,
+        flexibleEndDate: record.fields['Date fin'] || null,
+      },
+      
+      pickupMethod: (record.fields['Méthode de ramassage'] || '').toLowerCase() === 'domicile' ? 'domicile' : 'port',
+      deliveryMethod: (record.fields['Méthode de livraison'] || '').toLowerCase() === 'domicile' ? 'domicile' : 'port',
+      
+      departureHousing: record.fields['Type de logement départ'] || '',
+      departureFloor: record.fields['Étage départ'] || 0,
+      departureElevator: record.fields['Ascenseur départ'] === true,
+      
+      arrivalHousing: record.fields['Type de logement arrivée'] || '',
+      arrivalFloor: record.fields['Étage arrivée'] || 0,
+      arrivalElevator: record.fields['Ascenseur arrivée'] === true,
+      
+      purpose: record.fields['Motif d\'envoi'] || '',
+      taxExemption: record.fields['Éligible exonération fiscale'] || 'Non',
+      
+      hasPersonalEffects: record.fields['Effets personnels'] === true,
+      estimatedVolume: record.fields['Volume estimé'] || 0,
+      personalEffectsDescription: record.fields['Description effets personnels'] || '',
+      imageUrl: record.fields['Image URL'] || '',
+      
+      hasVehicles: (record.fields['Nombre de véhicules'] || 0) > 0,
+      vehiclesCount: record.fields['Nombre de véhicules'] || 0,
+      vehicles: vehicles,
+      
+      comment: record.fields['Commentaire'] || '',
+    };
+    
+    res.json(requestDetails);
+  } catch (error) {
+    console.error('Erreur lors de la récupération des détails de la demande:', error);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
+  }
+});
+
+// Fonction pour mapper les statuts Airtable vers les statuts API
+function mapAirtableStatusToApi(airtableStatus) {
+  const statusMap = {
+    'Nouveau': 'verification',
+    'En cours': 'verification',
+    'Vérifié': 'transmise',
+    'Transmis': 'transmise',
+    'Devis envoyés': 'choix',
+    'Terminé': 'complete'
+  };
+  
+  return statusMap[airtableStatus] || 'verification';
+}
+
 // Création du serveur HTTP
 const server = http.createServer(app);
 
