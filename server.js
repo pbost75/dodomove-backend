@@ -1076,7 +1076,7 @@ app.get('/request/:id', async (req, res) => {
     
     // Recherche par ID ou référence dans Airtable
     const records = await base(quoteFunnelTable).select({
-      filterByFormula: `OR({ID} = '${id}', {Référence} = '${id}')`,
+      filterByFormula: `OR({ID} = '${id}', {reference} = '${id}')`,
       maxRecords: 1
     }).firstPage();
     
@@ -1106,7 +1106,7 @@ app.get('/request/:id', async (req, res) => {
     // Mapper les données d'Airtable vers le format attendu par le frontend
     const requestDetails = {
       id: record.id,
-      reference: record.fields['Référence'] || id,
+      reference: record.fields['reference'] || id,
       firstName: record.fields['Prénom'] || '',
       lastName: record.fields['Nom'] || '',
       email: record.fields['Email'] || '',
