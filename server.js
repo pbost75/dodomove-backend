@@ -442,7 +442,6 @@ app.post('/submit-funnel', async (req, res) => {
       // Nouveaux champs pour le calculateur de volume
       console.log('  - usedCalculator:', personalBelongingsDetails.usedCalculator);
       console.log('  - calculatedVolumeFromCalculator:', personalBelongingsDetails.calculatedVolumeFromCalculator);
-      console.log('  - listingItemsCalculator:', !!personalBelongingsDetails.listingItemsCalculator);
     }
     console.log('- belongingsPhotos:', !!belongingsPhotos);
     if (belongingsPhotos) {
@@ -749,7 +748,6 @@ app.post('/submit-funnel', async (req, res) => {
             const numValue = Number(value);
             return isNaN(numValue) ? null : numValue;
           })(),
-          "listingItemsCalculator": personalBelongingsDetails?.listingItemsCalculator || '',
           
           // Véhicules - compteurs
           "vehicles_count_total": vehicleCounts.total,
