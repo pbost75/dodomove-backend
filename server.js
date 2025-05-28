@@ -439,6 +439,10 @@ app.post('/submit-funnel', async (req, res) => {
       console.log('  - movingScope:', personalBelongingsDetails.movingScope);
       console.log('  - estimatedVolume:', personalBelongingsDetails.estimatedVolume);
       console.log('  - description:', !!personalBelongingsDetails.description);
+      // Nouveaux champs pour le calculateur de volume
+      console.log('  - usedCalculator:', personalBelongingsDetails.usedCalculator);
+      console.log('  - calculatedVolumeFromCalculator:', personalBelongingsDetails.calculatedVolumeFromCalculator);
+      console.log('  - listingItemsCalculator:', !!personalBelongingsDetails.listingItemsCalculator);
     }
     console.log('- belongingsPhotos:', !!belongingsPhotos);
     if (belongingsPhotos) {
@@ -736,6 +740,16 @@ app.post('/submit-funnel', async (req, res) => {
           
           // Item Details
           "itemDetails_description": personalBelongingsDetails?.description || '',
+          
+          // Nouveaux champs pour le calculateur de volume
+          "usedCalculator": personalBelongingsDetails?.usedCalculator || false,
+          "calculatedVolumeFromCalculator": (() => {
+            const value = personalBelongingsDetails?.calculatedVolumeFromCalculator;
+            if (value === undefined || value === null || value === '') return null;
+            const numValue = Number(value);
+            return isNaN(numValue) ? null : numValue;
+          })(),
+          "listingItemsCalculator": personalBelongingsDetails?.listingItemsCalculator || '',
           
           // Véhicules - compteurs
           "vehicles_count_total": vehicleCounts.total,
