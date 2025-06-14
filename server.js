@@ -1344,73 +1344,96 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
       console.log('⚠️ Continuons sans Airtable pour ne pas bloquer l\'utilisateur');
     }
 
-    // Envoyer l'email de confirmation via Resend
+    // Envoyer l'email de validation via Resend
     try {
-      console.log('📧 Envoi de l\'email de confirmation...');
+      console.log('📧 Envoi de l\'email de validation...');
+      
+      // Générer un token de validation unique
+      const validationToken = crypto.randomUUID();
+      const validationUrl = `https://partage.dodomove.fr/api/validate-announcement?token=${validationToken}`;
+      
+      // Sauvegarder le token de validation (dans Airtable ou en mémoire temporaire)
+      // TODO: Implémenter le stockage du token pour la validation
+      console.log('🔑 Token de validation généré:', validationToken);
       
       const { data: emailData, error: emailError } = await resend.emails.send({
         from: 'DodoPartage <pierre.bost.pro@resend.dev>',
         to: [data.contact.email],
-        subject: '🚢 Votre annonce DodoPartage a été créée !',
+        subject: '🚢 Validez votre annonce DodoPartage',
         html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 5px; overflow: hidden;">
-          <!-- En-tête -->
-          <div style="background-color: #4285F4; padding: 20px; text-align: center;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">🚢 DodoPartage</h1>
-            <p style="color: white; margin: 10px 0 0 0; opacity: 0.9;">Plateforme de groupage collaboratif</p>
-          </div>
-          
-          <!-- Contenu principal -->
-          <div style="padding: 20px; background-color: white;">
-            <h2 style="color: #333; font-size: 22px;">Annonce créée avec succès ! ✅</h2>
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Validez votre annonce DodoPartage</title>
+        </head>
+        <body style="font-family: 'Lato', Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; line-height: 1.6;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
             
-            <p>Bonjour <strong>${data.contact.firstName}</strong>,</p>
-            
-            <p>Votre annonce de groupage a été créée avec succès sur DodoPartage !</p>
-            
-            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
-              <h3 style="margin-top: 0; color: #4285F4;">📋 Récapitulatif de votre annonce</h3>
-              <p><strong>Référence :</strong> ${reference}</p>
-              <p><strong>Trajet :</strong> ${data.departure.displayName} → ${data.arrival.displayName}</p>
-              <p><strong>Date d'expédition :</strong> ${new Date(data.shippingDate).toLocaleDateString('fr-FR')}</p>
-              <p><strong>Conteneur :</strong> ${data.container.type} pieds (${data.container.availableVolume} m³ disponible)</p>
-              <p><strong>Type d'offre :</strong> ${data.offerType === 'free' ? 'Gratuit' : 'Payant'}</p>
+            <!-- Header moderne -->
+            <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="color: white; font-family: 'Roboto Slab', serif; font-size: 28px; margin: 0; font-weight: 700;">
+                ⛵ DodoPartage
+              </h1>
+              <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
+                Groupage collaboratif DOM-TOM
+              </p>
             </div>
             
-            <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0;">
-              <h4 style="margin-top: 0; color: #856404;">⏳ Prochaines étapes</h4>
-              <ul style="margin: 0; padding-left: 20px; color: #856404;">
-                <li>Votre annonce est en cours de validation</li>
-                <li>Elle sera visible sur la plateforme sous 24h</li>
-                <li>Vous recevrez un email dès qu'elle sera publiée</li>
-                <li>Les personnes intéressées pourront vous contacter directement</li>
-              </ul>
+            <!-- Contenu principal -->
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #1e293b; font-size: 24px; margin: 0 0 20px 0; font-weight: 600;">
+                Bonjour ${data.contact.firstName} 👋
+              </h2>
+              
+              <p style="color: #475569; font-size: 16px; margin: 0 0 30px 0;">
+                Votre annonce de groupage <strong>${data.departure.displayName} → ${data.arrival.displayName}</strong> 
+                a bien été reçue !
+              </p>
+              
+              <!-- Bouton de validation principal -->
+              <div style="text-align: center; margin: 40px 0;">
+                <a href="${validationUrl}" 
+                   style="display: inline-block; background-color: #F47D6C; color: white; padding: 18px 36px; 
+                          text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; 
+                          box-shadow: 0 4px 12px rgba(244, 125, 108, 0.3); transition: all 0.2s;">
+                  ✅ Valider mon annonce
+                </a>
+              </div>
+              
+              <!-- Information simple -->
+              <div style="background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 20px; border-radius: 8px; margin: 30px 0;">
+                <p style="color: #334155; margin: 0; font-size: 14px;">
+                  <strong>Une fois validée</strong>, votre annonce sera visible publiquement et vous recevrez 
+                  les demandes de contact par email.
+                </p>
+              </div>
+              
+              <!-- Expiration -->
+              <p style="color: #64748b; font-size: 14px; text-align: center; margin: 30px 0 0 0;">
+                Ce lien expire dans 7 jours • Si vous n'êtes pas à l'origine de cette demande, ignorez cet email
+              </p>
             </div>
             
-            <div style="text-align: center; margin: 25px 0;">
-              <a href="https://partage.dodomove.fr" style="display: inline-block; background-color: #f47d6c; color: white; padding: 15px 25px; text-decoration: none; border-radius: 30px; font-weight: 500; font-size: 16px;">
-                Voir toutes les annonces
-              </a>
+            <!-- Footer simple -->
+            <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+                © 2024 DodoPartage - Une initiative 
+                <a href="https://dodomove.fr" style="color: #3b82f6; text-decoration: none;">Dodomove</a>
+              </p>
             </div>
             
-            <p>Merci de faire confiance à DodoPartage pour votre groupage ! 🙏</p>
-            
-            <p>L'équipe Dodomove</p>
           </div>
-          
-          <!-- Pied de page -->
-          <div style="text-align: center; padding: 15px; background-color: #f8f9fa; color: #666; font-size: 12px; border-top: 1px solid #e0e0e0;">
-            <p>© 2024 DodoPartage - Plateforme de groupage collaboratif</p>
-            <p>Une initiative Dodomove</p>
-          </div>
-        </div>
+        </body>
+        </html>
         `,
       });
 
       if (emailError) {
         console.error('❌ Erreur email:', emailError);
       } else {
-        console.log('✅ Email envoyé avec succès:', emailData.id);
+        console.log('✅ Email de validation envoyé avec succès:', emailData.id);
       }
       
     } catch (emailError) {
@@ -1505,6 +1528,50 @@ app.get('/api/partage/test', async (req, res) => {
       message: 'Erreur lors du test',
       error: error.message,
       timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Route pour valider une annonce DodoPartage via email
+app.get('/api/partage/validate-announcement', async (req, res) => {
+  console.log('GET /api/partage/validate-announcement appelé');
+  
+  try {
+    const { token } = req.query;
+    
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token de validation manquant',
+        message: 'Le lien de validation est invalide'
+      });
+    }
+    
+    console.log('🔍 Validation du token:', token);
+    
+    // TODO: Vérifier le token et mettre à jour le statut dans Airtable
+    // Pour l'instant, on simule une validation réussie
+    console.log('✅ Token validé avec succès (simulation)');
+    
+    // Réponse de succès pour redirection côté frontend
+    res.status(200).json({
+      success: true,
+      message: 'Annonce validée avec succès',
+      data: {
+        reference: 'PARTAGE-SIMULATED',
+        status: 'published',
+        validatedAt: new Date().toISOString()
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur lors de la validation:', error);
+    
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la validation',
+      message: 'Une erreur technique s\'est produite',
+      details: error.message
     });
   }
 });
