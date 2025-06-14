@@ -1285,7 +1285,7 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
         // Test avec seulement les champs de base
         'reference': reference,
         'created_at': new Date().toISOString(),
-        'status': 'New', // Même valeur que le funnel Dodomove qui fonctionne
+        'status': 'pending', // Test avec une autre valeur
         'contact_first_name': data.contact.firstName,
         'contact_email': data.contact.email
       }
