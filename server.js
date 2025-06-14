@@ -1259,13 +1259,33 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
     const reference = generateAnnouncementReference();
     console.log('Référence générée:', reference);
 
+    // Protection contre les doublons : vérifier si une annonce similaire existe déjà
+    try {
+      const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+      const recentRecords = await base(partageTableName).select({
+        filterByFormula: `AND({contact_email} = '${data.contact.email}', DATETIME_DIFF(NOW(), {created_at}, 'minutes') < 5)`,
+        maxRecords: 1
+      }).firstPage();
+      
+      if (recentRecords.length > 0) {
+        console.log('⚠️ Doublon détecté - annonce récente trouvée pour cet email');
+        return res.status(409).json({
+          success: false,
+          error: 'Une annonce a déjà été créée récemment avec cet email',
+          message: 'Veuillez attendre quelques minutes avant de créer une nouvelle annonce'
+        });
+      }
+    } catch (duplicateCheckError) {
+      console.log('⚠️ Impossible de vérifier les doublons, on continue:', duplicateCheckError.message);
+    }
+
     // Préparer les données pour Airtable (version simplifiée pour debug)
     const airtableData = {
       fields: {
         // Test avec seulement les champs de base
         'reference': reference,
         'created_at': new Date().toISOString(),
-        // 'status': 'pending_validation', // Temporairement désactivé pour debug
+        'status': 'pending', // Test avec une autre valeur
         'contact_first_name': data.contact.firstName,
         'contact_email': data.contact.email
       }
