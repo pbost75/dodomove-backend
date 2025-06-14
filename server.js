@@ -1205,6 +1205,9 @@ function mapAirtableStatusToApi(airtableStatus) {
 // ROUTES DODOPARTAGE - Plateforme de groupage
 // ========================================
 
+// Map pour stocker les soumissions en cours (protection contre doublons simultanés)
+const submissionInProgress = new Map();
+
 // Route pour soumettre une annonce DodoPartage
 app.post('/api/partage/submit-announcement', async (req, res) => {
   console.log('POST /api/partage/submit-announcement appelé');
@@ -1212,6 +1215,34 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
   
   try {
     const data = req.body;
+
+    // Protection contre les soumissions simultanées
+    const userEmail = data.contact?.email;
+    if (!userEmail) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email requis'
+      });
+    }
+
+    if (submissionInProgress.has(userEmail)) {
+      console.log('⚠️ Soumission déjà en cours pour:', userEmail);
+      return res.status(429).json({
+        success: false,
+        error: 'Une soumission est déjà en cours pour cet email',
+        message: 'Veuillez patienter...'
+      });
+    }
+    
+    // Marquer la soumission comme en cours
+    submissionInProgress.set(userEmail, Date.now());
+    console.log('🔒 Soumission verrouillée pour:', userEmail);
+
+    // Nettoyer automatiquement après 30 secondes
+    setTimeout(() => {
+      submissionInProgress.delete(userEmail);
+      console.log('🔓 Verrou libéré pour:', userEmail);
+    }, 30000);
 
     // Validation des données requises
     if (!data.contact?.email || !data.contact?.firstName) {
@@ -1387,6 +1418,10 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
       // On continue même si l'email échoue
     }
 
+    // Libérer le verrou avant la réponse
+    submissionInProgress.delete(userEmail);
+    console.log('🔓 Verrou libéré après succès pour:', userEmail);
+
     // Réponse de succès
     res.status(200).json({
       success: true,
@@ -1409,6 +1444,13 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Erreur lors de la soumission DodoPartage:', error);
+    
+    // Libérer le verrou en cas d'erreur aussi
+    const userEmail = req.body?.contact?.email;
+    if (userEmail) {
+      submissionInProgress.delete(userEmail);
+      console.log('🔓 Verrou libéré après erreur pour:', userEmail);
+    }
     
     res.status(500).json({
       success: false,
