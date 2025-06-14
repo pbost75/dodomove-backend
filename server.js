@@ -4,6 +4,7 @@ require('dotenv').config();
 // Import des modules pour l'envoi d'emails et Airtable
 const { Resend } = require('resend');
 const Airtable = require('airtable');
+const crypto = require('crypto');
 
 // Log toutes les variables d'environnement au démarrage
 console.log('=== Variables d\'environnement ===');
