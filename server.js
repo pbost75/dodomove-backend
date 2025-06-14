@@ -1259,40 +1259,42 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
     const reference = generateAnnouncementReference();
     console.log('Référence générée:', reference);
 
-    // Préparer les données pour Airtable
+    // Préparer les données pour Airtable (noms de colonnes en anglais)
     const airtableData = {
       fields: {
         // Référence et métadonnées
-        'Référence': reference,
-        'Date de création': new Date().toISOString(),
-        'Statut': 'En attente de validation',
+        'reference': reference,
+        'created_at': new Date().toISOString(),
+        'status': 'pending_validation',
         
         // Contact
-        'Prénom': data.contact.firstName,
-        'Email': data.contact.email,
-        'Téléphone': data.contact.phone || '',
+        'contact_first_name': data.contact.firstName,
+        'contact_email': data.contact.email,
+        'contact_phone': data.contact.phone || '',
         
         // Départ
-        'Départ - Pays': data.departure.country,
-        'Départ - Ville': data.departure.city,
-        'Départ - Code Postal': data.departure.postalCode,
-        'Départ - Nom Complet': data.departure.displayName,
+        'departure_country': data.departure.country,
+        'departure_city': data.departure.city,
+        'departure_postal_code': data.departure.postalCode,
+        'departure_display_name': data.departure.displayName,
         
         // Arrivée
-        'Arrivée - Pays': data.arrival.country,
-        'Arrivée - Ville': data.arrival.city,
-        'Arrivée - Code Postal': data.arrival.postalCode,
-        'Arrivée - Nom Complet': data.arrival.displayName,
+        'arrival_country': data.arrival.country,
+        'arrival_city': data.arrival.city,
+        'arrival_postal_code': data.arrival.postalCode,
+        'arrival_display_name': data.arrival.displayName,
         
         // Conteneur et dates
-        'Date d\'expédition': data.shippingDate,
-        'Type de conteneur': `${data.container.type} pieds`,
-        'Volume disponible (m³)': data.container.availableVolume,
-        'Volume minimum (m³)': data.container.minimumVolume,
+        'shipping_date': data.shippingDate,
+        'shipping_date_formatted': new Date(data.shippingDate).toLocaleDateString('fr-FR'),
+        'container_type': `${data.container.type}_feet`,
+        'container_available_volume': data.container.availableVolume,
+        'container_minimum_volume': data.container.minimumVolume,
         
         // Offre
-        'Type d\'offre': data.offerType === 'free' ? 'Gratuit' : 'Payant',
-        'Description de l\'annonce': data.announcementText
+        'offer_type': data.offerType,
+        'announcement_text': data.announcementText,
+        'announcement_text_length': data.announcementText.length
       }
     };
 
@@ -1301,8 +1303,8 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
     try {
       console.log('📤 Envoi vers Airtable...');
       
-      // Utiliser la table DodoPartage (à créer dans Airtable)
-      const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Annonces';
+      // Utiliser la table DodoPartage (cohérente avec les autres tables)
+      const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
       
       const records = await base(partageTableName).create([airtableData]);
       airtableRecordId = records[0].id;
@@ -1434,9 +1436,9 @@ app.get('/api/partage/test', async (req, res) => {
     // Test simple de connexion Airtable si configuré
     let airtableTest = { success: false, message: 'Non configuré' };
     if (hasAirtableConfig) {
-      try {
-        const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Annonces';
-        await base(partageTableName).select({ maxRecords: 1 }).firstPage();
+             try {
+         const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+         await base(partageTableName).select({ maxRecords: 1 }).firstPage();
         airtableTest = { success: true, message: 'Connexion réussie' };
       } catch (error) {
         airtableTest = { success: false, message: error.message };
