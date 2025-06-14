@@ -1217,7 +1217,7 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
   try {
     const data = req.body;
 
-    // Protection contre les soumissions simultanées
+    // Protection contre les soumissions simultanées IDENTIQUES
     const userEmail = data.contact?.email;
     if (!userEmail) {
       return res.status(400).json({
@@ -1226,24 +1226,27 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
       });
     }
 
-    if (submissionInProgress.has(userEmail)) {
-      console.log('⚠️ Soumission déjà en cours pour:', userEmail);
+    // Créer une empreinte unique de la soumission pour éviter les doublons IDENTIQUES
+    const submissionFingerprint = `${userEmail}-${data.departure.displayName}-${data.arrival.displayName}-${data.shippingDate}-${data.container.type}-${data.container.availableVolume}`;
+    
+    if (submissionInProgress.has(submissionFingerprint)) {
+      console.log('⚠️ Soumission IDENTIQUE déjà en cours:', submissionFingerprint);
       return res.status(429).json({
         success: false,
-        error: 'Une soumission est déjà en cours pour cet email',
+        error: 'Une soumission identique est déjà en cours',
         message: 'Veuillez patienter...'
       });
     }
     
-    // Marquer la soumission comme en cours
-    submissionInProgress.set(userEmail, Date.now());
-    console.log('🔒 Soumission verrouillée pour:', userEmail);
+    // Marquer cette soumission spécifique comme en cours
+    submissionInProgress.set(submissionFingerprint, Date.now());
+    console.log('🔒 Soumission verrouillée:', submissionFingerprint);
 
-    // Nettoyer automatiquement après 10 secondes (réduit pour UX)
+    // Nettoyer automatiquement après 30 secondes
     setTimeout(() => {
-      submissionInProgress.delete(userEmail);
-      console.log('🔓 Verrou libéré automatiquement pour:', userEmail);
-    }, 10000);
+      submissionInProgress.delete(submissionFingerprint);
+      console.log('🔓 Verrou libéré automatiquement pour:', submissionFingerprint);
+    }, 30000);
 
     // Validation des données requises
     if (!data.contact?.email || !data.contact?.firstName) {
@@ -1302,8 +1305,8 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
       if (recentRecords.length > 0) {
         console.log('⚠️ Doublon détecté - annonce récente trouvée pour cet email (moins de 2 minutes)');
         // Libérer le verrou avant de retourner l'erreur
-        submissionInProgress.delete(userEmail);
-        console.log('🔓 Verrou libéré après détection de doublon pour:', userEmail);
+        submissionInProgress.delete(submissionFingerprint);
+        console.log('🔓 Verrou libéré après détection de doublon pour:', submissionFingerprint);
         
         return res.status(409).json({
           success: false,
@@ -1478,8 +1481,8 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
     }
 
     // Libérer le verrou avant la réponse
-    submissionInProgress.delete(userEmail);
-    console.log('🔓 Verrou libéré après succès pour:', userEmail);
+    submissionInProgress.delete(submissionFingerprint);
+    console.log('🔓 Verrou libéré après succès pour:', submissionFingerprint);
 
     // Réponse de succès
     res.status(200).json({
@@ -1506,9 +1509,10 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
     
     // Libérer le verrou en cas d'erreur aussi
     const userEmail = req.body?.contact?.email;
-    if (userEmail) {
-      submissionInProgress.delete(userEmail);
-      console.log('🔓 Verrou libéré après erreur pour:', userEmail);
+    if (userEmail && req.body?.departure && req.body?.arrival) {
+      const submissionFingerprint = `${userEmail}-${req.body.departure.displayName}-${req.body.arrival.displayName}-${req.body.shippingDate}-${req.body.container.type}-${req.body.container.availableVolume}`;
+      submissionInProgress.delete(submissionFingerprint);
+      console.log('🔓 Verrou libéré après erreur pour:', submissionFingerprint);
     }
     
     res.status(500).json({
