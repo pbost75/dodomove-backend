@@ -1316,15 +1316,46 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
       console.log('⚠️ Impossible de vérifier les doublons, on continue:', duplicateCheckError.message);
     }
 
-    // Préparer les données pour Airtable (version simplifiée pour debug)
+    // Préparer les données complètes pour Airtable
     const airtableData = {
       fields: {
-        // Test avec seulement les champs de base
+        // Identifiant et statut
         'reference': reference,
         'created_at': new Date().toISOString(),
-        'status': 'pending', // Test avec une autre valeur
+        'status': 'pending',
+        'validation_token': crypto.randomUUID(),
+        'expires_at': new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString(), // 7 jours
+        
+        // Contact
         'contact_first_name': data.contact.firstName,
-        'contact_email': data.contact.email
+        'contact_email': data.contact.email,
+        'contact_phone': data.contact.phone || '',
+        
+        // Départ
+        'departure_country': data.departure.country,
+        'departure_city': data.departure.city,
+        'departure_postal_code': data.departure.postalCode || '',
+        'departure_display_name': data.departure.displayName,
+        
+        // Arrivée
+        'arrival_country': data.arrival.country,
+        'arrival_city': data.arrival.city,
+        'arrival_postal_code': data.arrival.postalCode || '',  
+        'arrival_display_name': data.arrival.displayName,
+        
+        // Date d'expédition
+        'shipping_date': data.shippingDate,
+        
+        // Conteneur
+        'container_type': data.container.type,
+        'container_available_volume': parseFloat(data.container.availableVolume) || 0,
+        'container_minimum_volume': parseFloat(data.container.minimumVolume) || 0,
+        
+        // Type d'offre
+        'offer_type': data.offerType,
+        
+        // Texte de l'annonce
+        'announcement_text': data.announcementText || ''
       }
     };
     
@@ -1354,13 +1385,12 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
     try {
       console.log('📧 Envoi de l\'email de validation...');
       
-      // Générer un token de validation unique
-      const validationToken = crypto.randomUUID();
-      const validationUrl = `https://partage.dodomove.fr/api/validate-announcement?token=${validationToken}`;
+      // Utiliser le token de validation déjà stocké dans Airtable
+      const validationToken = airtableData.fields.validation_token;
+      const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://partage.dodomove.fr';
+      const validationUrl = `${frontendUrl}/api/validate-announcement?token=${validationToken}`;
       
-      // Sauvegarder le token de validation (dans Airtable ou en mémoire temporaire)
-      // TODO: Implémenter le stockage du token pour la validation
-      console.log('🔑 Token de validation généré:', validationToken);
+      console.log('🔑 Token de validation utilisé:', validationToken);
       
       const { data: emailData, error: emailError } = await resend.emails.send({
         from: 'DodoPartage <pierre.bost.pro@resend.dev>',
