@@ -1238,11 +1238,11 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
     submissionInProgress.set(userEmail, Date.now());
     console.log('🔒 Soumission verrouillée pour:', userEmail);
 
-    // Nettoyer automatiquement après 30 secondes
+    // Nettoyer automatiquement après 10 secondes (réduit pour UX)
     setTimeout(() => {
       submissionInProgress.delete(userEmail);
-      console.log('🔓 Verrou libéré pour:', userEmail);
-    }, 30000);
+      console.log('🔓 Verrou libéré automatiquement pour:', userEmail);
+    }, 10000);
 
     // Validation des données requises
     if (!data.contact?.email || !data.contact?.firstName) {
