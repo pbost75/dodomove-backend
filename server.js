@@ -1295,16 +1295,21 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
     try {
       const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
       const recentRecords = await base(partageTableName).select({
-        filterByFormula: `AND({contact_email} = '${data.contact.email}', DATETIME_DIFF(NOW(), {created_at}, 'minutes') < 5)`,
+        filterByFormula: `AND({contact_email} = '${data.contact.email}', DATETIME_DIFF(NOW(), {created_at}, 'minutes') < 2)`,
         maxRecords: 1
       }).firstPage();
       
       if (recentRecords.length > 0) {
-        console.log('⚠️ Doublon détecté - annonce récente trouvée pour cet email');
+        console.log('⚠️ Doublon détecté - annonce récente trouvée pour cet email (moins de 2 minutes)');
+        // Libérer le verrou avant de retourner l'erreur
+        submissionInProgress.delete(userEmail);
+        console.log('🔓 Verrou libéré après détection de doublon pour:', userEmail);
+        
         return res.status(409).json({
           success: false,
-          error: 'Une annonce a déjà été créée récemment avec cet email',
-          message: 'Veuillez attendre quelques minutes avant de créer une nouvelle annonce'
+          error: 'duplicate',
+          message: 'Une annonce a déjà été créée récemment avec cet email',
+          details: 'Veuillez attendre 2 minutes avant de créer une nouvelle annonce'
         });
       }
     } catch (duplicateCheckError) {
