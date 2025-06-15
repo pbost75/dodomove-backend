@@ -1616,6 +1616,194 @@ app.get('/api/partage/validate-announcement', async (req, res) => {
   }
 });
 
+// Route pour récupérer les annonces DodoPartage
+app.get('/api/partage/get-announcements', async (req, res) => {
+  console.log('GET /api/partage/get-announcements appelé');
+  
+  try {
+    // Récupération des paramètres de filtrage
+    const { 
+      type = 'all',           // offer, request, all
+      departure = '',         // filtrer par lieu de départ
+      arrival = '',           // filtrer par lieu d'arrivée  
+      volumeMin = '',         // volume minimum
+      volumeMax = '',         // volume maximum
+      status = 'published'    // published, pending_validation, all
+    } = req.query;
+
+    console.log('🔍 Paramètres de filtrage reçus:', {
+      type, departure, arrival, volumeMin, volumeMax, status
+    });
+
+    // Vérifier les variables d'environnement
+    const hasAirtableConfig = !!(process.env.AIRTABLE_API_KEY && process.env.AIRTABLE_BASE_ID);
+    if (!hasAirtableConfig) {
+      console.error('❌ Configuration Airtable manquante');
+      return res.status(500).json({
+        success: false,
+        error: 'Configuration base de données manquante',
+        data: [],
+        total: 0
+      });
+    }
+
+    // Nom de la table DodoPartage
+    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    console.log('📋 Récupération depuis la table:', partageTableName);
+
+    // Construction des filtres Airtable
+    let filterFormula = '';
+    const filters = [];
+
+    // Filtre par statut
+    if (status !== 'all') {
+      filters.push(`{status} = '${status}'`);
+    }
+
+    // TODO: Ajouter d'autres filtres selon les besoins
+    // if (type !== 'all') {
+    //   filters.push(`{offer_type} = '${type}'`);
+    // }
+    
+    if (filters.length > 0) {
+      filterFormula = `AND(${filters.join(', ')})`;
+    }
+
+    console.log('🔍 Formule de filtre Airtable:', filterFormula || 'Aucun filtre');
+
+    // Récupération des enregistrements depuis Airtable
+    const selectOptions = {
+      maxRecords: 100, // Limiter à 100 annonces
+      sort: [{ field: 'created_at', direction: 'desc' }], // Plus récentes en premier
+    };
+
+    if (filterFormula) {
+      selectOptions.filterByFormula = filterFormula;
+    }
+
+    const records = await base(partageTableName).select(selectOptions).all();
+    
+    console.log(`📊 ${records.length} enregistrement(s) récupéré(s) depuis Airtable`);
+
+    // Transformation des données Airtable vers le format API
+    const announcements = records.map(record => {
+      const fields = record.fields;
+      
+      return {
+        id: record.id,
+        reference: fields.reference || '',
+        status: fields.status || 'pending_validation',
+        created_at: fields.created_at || new Date().toISOString(),
+        contact_first_name: fields.contact_first_name || '',
+        contact_email: fields.contact_email || '',
+        contact_phone: fields.contact_phone || '',
+        departure_country: fields.departure_country || '',
+        departure_city: fields.departure_city || '',
+        departure_postal_code: fields.departure_postal_code || '',
+        departure_display_name: fields.departure_display_name || '',
+        arrival_country: fields.arrival_country || '',
+        arrival_city: fields.arrival_city || '',
+        arrival_postal_code: fields.arrival_postal_code || '',
+        arrival_display_name: fields.arrival_display_name || '',
+        shipping_date: fields.shipping_date || '',
+        shipping_date_formatted: fields.shipping_date_formatted || '',
+        container_type: fields.container_type || '20',
+        container_available_volume: fields.container_available_volume || 0,
+        container_minimum_volume: fields.container_minimum_volume || 0,
+        offer_type: fields.offer_type || 'free',
+        announcement_text: fields.announcement_text || '',
+        announcement_text_length: fields.announcement_text_length || 0
+      };
+    });
+
+    // Filtrage côté serveur si nécessaire (pour les filtres non supportés par Airtable)
+    let filteredAnnouncements = announcements;
+
+    // Filtre par départ
+    if (departure) {
+      filteredAnnouncements = filteredAnnouncements.filter(ann => 
+        ann.departure_country.toLowerCase().includes(departure.toLowerCase()) ||
+        ann.departure_city.toLowerCase().includes(departure.toLowerCase()) ||
+        ann.departure_display_name.toLowerCase().includes(departure.toLowerCase())
+      );
+    }
+
+    // Filtre par arrivée
+    if (arrival) {
+      filteredAnnouncements = filteredAnnouncements.filter(ann => 
+        ann.arrival_country.toLowerCase().includes(arrival.toLowerCase()) ||
+        ann.arrival_city.toLowerCase().includes(arrival.toLowerCase()) ||
+        ann.arrival_display_name.toLowerCase().includes(arrival.toLowerCase())
+      );
+    }
+
+    // Filtre par volume
+    if (volumeMin) {
+      const minVol = parseFloat(volumeMin);
+      filteredAnnouncements = filteredAnnouncements.filter(ann => 
+        ann.container_available_volume >= minVol
+      );
+    }
+
+    if (volumeMax) {
+      const maxVol = parseFloat(volumeMax);
+      filteredAnnouncements = filteredAnnouncements.filter(ann => 
+        ann.container_available_volume <= maxVol
+      );
+    }
+
+    // Statistiques pour le debug
+    const stats = {
+      total: filteredAnnouncements.length,
+      byType: {
+        offers: filteredAnnouncements.filter(a => a.offer_type === 'free' || a.offer_type === 'paid').length,
+        requests: 0 // Pour l'instant, toutes les annonces sont des offres
+      },
+      byStatus: {
+        published: filteredAnnouncements.filter(a => a.status === 'published').length,
+        pending: filteredAnnouncements.filter(a => a.status === 'pending_validation').length
+      }
+    };
+
+    console.log('📊 Statistiques des annonces:', stats);
+
+    // Réponse de succès
+    res.status(200).json({
+      success: true,
+      data: filteredAnnouncements,
+      message: `${filteredAnnouncements.length} annonce${filteredAnnouncements.length > 1 ? 's' : ''} trouvée${filteredAnnouncements.length > 1 ? 's' : ''}`,
+      total: filteredAnnouncements.length,
+      stats,
+      filters: {
+        applied: { type, departure, arrival, volumeMin, volumeMax, status },
+        resultsFiltered: filteredAnnouncements.length < records.length
+      },
+      backend: {
+        source: 'airtable',
+        table: partageTableName,
+        timestamp: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération des annonces:', error);
+    
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la récupération des annonces',
+      message: 'Une erreur technique s\'est produite',
+      details: error.message,
+      data: [], // Retourner un tableau vide en cas d'erreur
+      total: 0,
+      backend: {
+        source: 'airtable',
+        timestamp: new Date().toISOString(),
+        error: true
+      }
+    });
+  }
+});
+
 // Création du serveur HTTP
 const server = http.createServer(app);
 
@@ -1634,6 +1822,7 @@ server.listen(PORT, host, () => {
   console.log('- POST /submit-funnel');
   console.log('- POST /api/partage/submit-announcement (DodoPartage)');
   console.log('- GET /api/partage/test (DodoPartage)');
+  console.log('- GET /api/partage/get-announcements (DodoPartage)');
 });
 
 // Gestion des erreurs
