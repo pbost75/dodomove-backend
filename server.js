@@ -1863,6 +1863,243 @@ app.get('/api/partage/get-announcements', async (req, res) => {
   }
 });
 
+// Route pour envoyer un message de contact pour une annonce DodoPartage
+app.post('/api/partage/contact-announcement', async (req, res) => {
+  console.log('POST /api/partage/contact-announcement appelé');
+  
+  try {
+    const {
+      announcementId,
+      contactName,
+      contactEmail,
+      message,
+      announcementDetails,
+      timestamp,
+      source
+    } = req.body;
+
+    console.log('📬 Nouvelle demande de contact:', {
+      announcementId,
+      contactName,
+      contactEmail,
+      messageLength: message?.length,
+      source
+    });
+
+    // Validation des données obligatoires
+    if (!announcementId || !contactName || !contactEmail || !message) {
+      return res.status(400).json({
+        success: false,
+        error: 'Données manquantes',
+        message: 'Tous les champs sont obligatoires'
+      });
+    }
+
+    // Vérifier les variables d'environnement
+    const hasAirtableConfig = !!(process.env.AIRTABLE_API_KEY && process.env.AIRTABLE_BASE_ID);
+    const hasResendConfig = !!process.env.RESEND_API_KEY;
+    
+    if (!hasAirtableConfig) {
+      console.error('❌ Configuration Airtable manquante pour le contact');
+      return res.status(500).json({
+        success: false,
+        error: 'Configuration base de données manquante'
+      });
+    }
+
+    if (!hasResendConfig) {
+      console.error('❌ Configuration Resend manquante pour l\'email');
+      return res.status(500).json({
+        success: false,
+        error: 'Configuration email manquante'
+      });
+    }
+
+    // Récupérer les détails de l'annonce depuis Airtable
+    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    console.log('🔍 Recherche de l\'annonce dans:', partageTableName);
+
+    let announcementRecord = null;
+    try {
+      announcementRecord = await base(partageTableName).find(announcementId);
+      console.log('📋 Annonce trouvée:', {
+        id: announcementRecord.id,
+        reference: announcementRecord.fields.reference,
+        author: announcementRecord.fields.contact_first_name,
+        authorEmail: announcementRecord.fields.contact_email
+      });
+    } catch (airtableError) {
+      console.error('❌ Annonce non trouvée:', airtableError);
+      return res.status(404).json({
+        success: false,
+        error: 'Annonce non trouvée',
+        message: 'L\'annonce demandée n\'existe pas ou n\'est plus disponible'
+      });
+    }
+
+    const authorEmail = announcementRecord.fields.contact_email;
+    const authorName = announcementRecord.fields.contact_first_name;
+    const reference = announcementRecord.fields.reference;
+
+    // Enregistrer le contact dans Airtable (table des contacts)
+    let contactRecordId = null;
+    try {
+      console.log('💾 Enregistrement du contact dans Airtable...');
+      
+      // Utiliser une table séparée pour les contacts (optionnel)
+      const contactsTableName = process.env.AIRTABLE_CONTACTS_TABLE_NAME || 'DodoPartage - Contacts';
+      
+      const contactData = {
+        fields: {
+          'announcement_id': announcementId,
+          'announcement_reference': reference,
+          'contact_name': contactName,
+          'contact_email': contactEmail,
+          'message': message,
+          'contacted_at': new Date().toISOString(),
+          'ip_address': req.ip || 'unknown'
+        }
+      };
+
+      const contactRecords = await base(contactsTableName).create([contactData]);
+      contactRecordId = contactRecords[0].id;
+      
+      console.log('✅ Contact enregistré:', contactRecordId);
+      
+    } catch (airtableError) {
+      console.error('❌ Erreur enregistrement contact:', airtableError);
+      // On continue même si l'enregistrement échoue
+    }
+
+    // Envoyer l'email à l'auteur de l'annonce
+    try {
+      console.log('📧 Envoi de l\'email de contact...');
+      
+      const { data: emailData, error: emailError } = await resend.emails.send({
+        from: 'DodoPartage <pierre.bost.pro@resend.dev>',
+        to: [authorEmail],
+        cc: [contactEmail], // Copie à l'expéditeur
+        subject: `📬 Nouveau contact pour votre annonce ${reference}`,
+        html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Nouveau contact - DodoPartage</title>
+        </head>
+        <body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; line-height: 1.6;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
+            
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #243163 0%, #1e2951 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="color: white; font-family: 'Inter', sans-serif; font-size: 28px; margin: 0; font-weight: 700;">
+                📬 DodoPartage
+              </h1>
+              <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
+                Nouveau contact pour votre annonce
+              </p>
+            </div>
+            
+            <!-- Contenu principal -->
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #1e293b; font-size: 24px; margin: 0 0 20px 0; font-weight: 600;">
+                Bonjour ${authorName} 👋
+              </h2>
+              
+              <p style="color: #475569; font-size: 16px; margin: 0 0 30px 0;">
+                <strong>${contactName}</strong> souhaite vous contacter au sujet de votre annonce 
+                <strong>${reference}</strong> :
+              </p>
+              
+              <!-- Message -->
+              <div style="background-color: #f1f5f9; border-left: 4px solid #243163; padding: 20px; border-radius: 8px; margin: 30px 0;">
+                <p style="color: #334155; margin: 0; font-size: 14px; white-space: pre-wrap;">${message}</p>
+              </div>
+              
+              <!-- Informations de contact -->
+              <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 30px 0;">
+                <h3 style="color: #1e293b; font-size: 16px; margin: 0 0 10px 0;">Coordonnées :</h3>
+                <p style="color: #475569; margin: 0; font-size: 14px;">
+                  <strong>Nom :</strong> ${contactName}<br>
+                  <strong>Email :</strong> <a href="mailto:${contactEmail}" style="color: #243163;">${contactEmail}</a>
+                </p>
+              </div>
+              
+              <!-- Bouton de réponse -->
+              <div style="text-align: center; margin: 40px 0;">
+                <a href="mailto:${contactEmail}?subject=Re: ${reference} - DodoPartage&body=Bonjour ${contactName},%0A%0AMerci pour votre message concernant mon annonce ${reference}.%0A%0A" 
+                   style="display: inline-block; background-color: #F47D6C; color: white; padding: 18px 36px; 
+                          text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; 
+                          box-shadow: 0 4px 12px rgba(244, 125, 108, 0.3);">
+                  📧 Répondre à ${contactName}
+                </a>
+              </div>
+              
+              <p style="color: #64748b; font-size: 14px; text-align: center; margin: 30px 0 0 0;">
+                Vous recevez cet email car quelqu'un souhaite vous contacter via DodoPartage
+              </p>
+            </div>
+            
+            <!-- Footer -->
+            <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+                © 2024 DodoPartage - Une initiative 
+                <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+              </p>
+            </div>
+            
+          </div>
+        </body>
+        </html>
+        `,
+      });
+
+      if (emailError) {
+        console.error('❌ Erreur email:', emailError);
+        throw new Error('Erreur lors de l\'envoi de l\'email');
+      } else {
+        console.log('✅ Email de contact envoyé avec succès:', emailData.id);
+      }
+      
+    } catch (emailError) {
+      console.error('❌ Erreur lors de l\'envoi de l\'email:', emailError);
+      return res.status(500).json({
+        success: false,
+        error: 'Erreur lors de l\'envoi de l\'email',
+        message: 'Votre message n\'a pas pu être envoyé'
+      });
+    }
+
+    // Réponse de succès
+    res.status(200).json({
+      success: true,
+      message: 'Votre message a été envoyé avec succès !',
+      data: {
+        contactId: contactRecordId,
+        emailSent: true,
+        contactName,
+        contactEmail,
+        announcementId,
+        announcementReference: reference,
+        authorName,
+        authorEmail,
+        timestamp: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors du contact:', error);
+    
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de l\'envoi du contact',
+      message: 'Une erreur technique s\'est produite',
+      details: error.message
+    });
+  }
+});
+
 // Création du serveur HTTP
 const server = http.createServer(app);
 
@@ -1882,6 +2119,8 @@ server.listen(PORT, host, () => {
   console.log('- POST /api/partage/submit-announcement (DodoPartage)');
   console.log('- GET /api/partage/test (DodoPartage)');
   console.log('- GET /api/partage/get-announcements (DodoPartage)');
+  console.log('- GET /api/partage/validate-announcement (DodoPartage)');
+  console.log('- POST /api/partage/contact-announcement (DodoPartage)');
 });
 
 // Gestion des erreurs
