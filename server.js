@@ -1338,13 +1338,11 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
         'departure_country': data.departure.country,
         'departure_city': data.departure.city,
         'departure_postal_code': data.departure.postalCode || '',
-        'departure_display_name': data.departure.displayName,
         
         // Arrivée
         'arrival_country': data.arrival.country,
         'arrival_city': data.arrival.city,
-        'arrival_postal_code': data.arrival.postalCode || '',  
-        'arrival_display_name': data.arrival.displayName,
+        'arrival_postal_code': data.arrival.postalCode || '',
         
         // Date d'expédition
         'shipping_date': data.shippingDate,
@@ -1407,13 +1405,13 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Validez votre annonce DodoPartage</title>
         </head>
-        <body style="font-family: 'Lato', Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; line-height: 1.6;">
-          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+        <body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; line-height: 1.6;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
             
-            <!-- Header moderne -->
-            <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 40px 30px; text-align: center;">
-              <h1 style="color: white; font-family: 'Roboto Slab', serif; font-size: 28px; margin: 0; font-weight: 700;">
-                ⛵ DodoPartage
+            <!-- Header moderne avec les bonnes couleurs -->
+            <div style="background: linear-gradient(135deg, #243163 0%, #1e2951 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="color: white; font-family: 'Inter', sans-serif; font-size: 28px; margin: 0; font-weight: 700;">
+                🚢 DodoPartage
               </h1>
               <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
                 Groupage collaboratif DOM-TOM
@@ -1442,7 +1440,7 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
               </div>
               
               <!-- Information simple -->
-              <div style="background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 20px; border-radius: 8px; margin: 30px 0;">
+              <div style="background-color: #f1f5f9; border-left: 4px solid #243163; padding: 20px; border-radius: 8px; margin: 30px 0;">
                 <p style="color: #334155; margin: 0; font-size: 14px;">
                   <strong>Une fois validée</strong>, votre annonce sera visible publiquement et vous recevrez 
                   les demandes de contact par email.
@@ -1459,7 +1457,7 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
             <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
               <p style="color: #94a3b8; font-size: 12px; margin: 0;">
                 © 2024 DodoPartage - Une initiative 
-                <a href="https://dodomove.fr" style="color: #3b82f6; text-decoration: none;">Dodomove</a>
+                <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
               </p>
             </div>
             
@@ -1589,18 +1587,83 @@ app.get('/api/partage/validate-announcement', async (req, res) => {
     
     console.log('🔍 Validation du token:', token);
     
-    // TODO: Vérifier le token et mettre à jour le statut dans Airtable
-    // Pour l'instant, on simule une validation réussie
-    console.log('✅ Token validé avec succès (simulation)');
+    // Vérifier les variables d'environnement Airtable
+    const hasAirtableConfig = !!(process.env.AIRTABLE_API_KEY && process.env.AIRTABLE_BASE_ID);
+    if (!hasAirtableConfig) {
+      console.error('❌ Configuration Airtable manquante pour la validation');
+      return res.status(500).json({
+        success: false,
+        error: 'Configuration base de données manquante',
+        message: 'Erreur de configuration serveur'
+      });
+    }
+
+    // Nom de la table DodoPartage
+    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    console.log('🔍 Recherche du token dans la table:', partageTableName);
+
+    // Rechercher l'annonce avec ce token de validation
+    const records = await base(partageTableName).select({
+      filterByFormula: `{validation_token} = '${token}'`,
+      maxRecords: 1
+    }).firstPage();
+
+    if (records.length === 0) {
+      console.log('❌ Token non trouvé dans Airtable');
+      return res.status(404).json({
+        success: false,
+        error: 'Token de validation non trouvé',
+        message: 'Ce lien de validation est invalide ou a expiré'
+      });
+    }
+
+    const record = records[0];
+    const currentStatus = record.fields.status;
+    
+    console.log('📋 Annonce trouvée:', {
+      id: record.id,
+      reference: record.fields.reference,
+      currentStatus: currentStatus,
+      email: record.fields.contact_email
+    });
+
+    // Vérifier si l'annonce n'est pas déjà validée
+    if (currentStatus === 'published') {
+      console.log('ℹ️ Annonce déjà validée');
+      return res.status(200).json({
+        success: true,
+        message: 'Annonce déjà validée',
+        data: {
+          reference: record.fields.reference,
+          status: 'published',
+          validatedAt: record.fields.validated_at || new Date().toISOString()
+        }
+      });
+    }
+
+    // Mettre à jour le statut de l'annonce
+    console.log('🔄 Mise à jour du statut vers "published"...');
+    
+    const updatedRecord = await base(partageTableName).update(record.id, {
+      status: 'published',
+      validated_at: new Date().toISOString(),
+      validation_token: '' // Supprimer le token après utilisation
+    });
+
+    console.log('✅ Annonce validée avec succès:', {
+      id: updatedRecord.id,
+      reference: updatedRecord.fields.reference,
+      newStatus: updatedRecord.fields.status
+    });
     
     // Réponse de succès pour redirection côté frontend
     res.status(200).json({
       success: true,
       message: 'Annonce validée avec succès',
       data: {
-        reference: 'PARTAGE-SIMULATED',
+        reference: updatedRecord.fields.reference,
         status: 'published',
-        validatedAt: new Date().toISOString()
+        validatedAt: updatedRecord.fields.validated_at
       }
     });
     
@@ -1700,11 +1763,9 @@ app.get('/api/partage/get-announcements', async (req, res) => {
         departure_country: fields.departure_country || '',
         departure_city: fields.departure_city || '',
         departure_postal_code: fields.departure_postal_code || '',
-        departure_display_name: fields.departure_display_name || '',
         arrival_country: fields.arrival_country || '',
         arrival_city: fields.arrival_city || '',
         arrival_postal_code: fields.arrival_postal_code || '',
-        arrival_display_name: fields.arrival_display_name || '',
         shipping_date: fields.shipping_date || '',
         shipping_date_formatted: fields.shipping_date_formatted || '',
         container_type: fields.container_type || '20',
@@ -1723,8 +1784,7 @@ app.get('/api/partage/get-announcements', async (req, res) => {
     if (departure) {
       filteredAnnouncements = filteredAnnouncements.filter(ann => 
         ann.departure_country.toLowerCase().includes(departure.toLowerCase()) ||
-        ann.departure_city.toLowerCase().includes(departure.toLowerCase()) ||
-        ann.departure_display_name.toLowerCase().includes(departure.toLowerCase())
+        ann.departure_city.toLowerCase().includes(departure.toLowerCase())
       );
     }
 
@@ -1732,8 +1792,7 @@ app.get('/api/partage/get-announcements', async (req, res) => {
     if (arrival) {
       filteredAnnouncements = filteredAnnouncements.filter(ann => 
         ann.arrival_country.toLowerCase().includes(arrival.toLowerCase()) ||
-        ann.arrival_city.toLowerCase().includes(arrival.toLowerCase()) ||
-        ann.arrival_display_name.toLowerCase().includes(arrival.toLowerCase())
+        ann.arrival_city.toLowerCase().includes(arrival.toLowerCase())
       );
     }
 
