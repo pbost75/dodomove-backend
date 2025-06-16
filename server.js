@@ -1777,23 +1777,40 @@ app.get('/api/partage/get-announcements', async (req, res) => {
       };
     });
 
+    // Fonction pour normaliser les textes (supprime accents et caractères spéciaux)
+    const normalizeText = (text) => {
+      if (!text) return '';
+      return text
+        .toLowerCase()
+        .normalize('NFD') // Décompose les caractères accentués
+        .replace(/[\u0300-\u036f]/g, '') // Supprime les marques diacritiques (accents)
+        .replace(/[^a-z0-9\s]/g, '') // Supprime les caractères spéciaux
+        .trim();
+    };
+
     // Filtrage côté serveur si nécessaire (pour les filtres non supportés par Airtable)
     let filteredAnnouncements = announcements;
 
-    // Filtre par départ
+    // Filtre par départ (avec normalisation pour gérer les accents)
     if (departure) {
-      filteredAnnouncements = filteredAnnouncements.filter(ann => 
-        ann.departure_country.toLowerCase().includes(departure.toLowerCase()) ||
-        ann.departure_city.toLowerCase().includes(departure.toLowerCase())
-      );
+      const normalizedDeparture = normalizeText(departure);
+      filteredAnnouncements = filteredAnnouncements.filter(ann => {
+        const normalizedCountry = normalizeText(ann.departure_country);
+        const normalizedCity = normalizeText(ann.departure_city);
+        return normalizedCountry.includes(normalizedDeparture) || 
+               normalizedCity.includes(normalizedDeparture);
+      });
     }
 
-    // Filtre par arrivée
+    // Filtre par arrivée (avec normalisation pour gérer les accents)
     if (arrival) {
-      filteredAnnouncements = filteredAnnouncements.filter(ann => 
-        ann.arrival_country.toLowerCase().includes(arrival.toLowerCase()) ||
-        ann.arrival_city.toLowerCase().includes(arrival.toLowerCase())
-      );
+      const normalizedArrival = normalizeText(arrival);
+      filteredAnnouncements = filteredAnnouncements.filter(ann => {
+        const normalizedCountry = normalizeText(ann.arrival_country);
+        const normalizedCity = normalizeText(ann.arrival_city);
+        return normalizedCountry.includes(normalizedArrival) || 
+               normalizedCity.includes(normalizedArrival);
+      });
     }
 
     // Filtre par volume
