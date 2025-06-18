@@ -2383,6 +2383,277 @@ app.post('/api/partage/confirm-deletion', async (req, res) => {
   }
 });
 
+// Route pour récupérer les données d'une annonce pour modification
+app.get('/api/partage/edit-form/:token', async (req, res) => {
+  console.log('GET /api/partage/edit-form appelé avec token:', req.params.token);
+  
+  try {
+    const editToken = req.params.token;
+    
+    if (!editToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token de modification manquant'
+      });
+    }
+
+    // Vérifier que l'annonce existe avec ce token
+    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    
+    const records = await base(partageTableName).select({
+      filterByFormula: `{edit_token} = '${editToken}'`,
+      maxRecords: 1
+    }).firstPage();
+
+    if (records.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Annonce non trouvée ou token invalide'
+      });
+    }
+
+    const announcement = records[0];
+    const fields = announcement.fields;
+    
+    // Retourner toutes les données nécessaires pour le formulaire de modification
+    res.status(200).json({
+      success: true,
+      data: {
+        id: announcement.id,
+        reference: fields.reference,
+        contact: {
+          firstName: fields.contact_first_name,
+          lastName: fields.contact_last_name,
+          email: fields.contact_email,
+          phone: fields.contact_phone
+        },
+        departure: {
+          country: fields.departure_country,
+          city: fields.departure_city,
+          postalCode: fields.departure_postal_code,
+          displayName: `${fields.departure_country} (${fields.departure_city})`
+        },
+        arrival: {
+          country: fields.arrival_country,
+          city: fields.arrival_city,
+          postalCode: fields.arrival_postal_code,
+          displayName: `${fields.arrival_country} (${fields.arrival_city})`
+        },
+        shippingDate: fields.shipping_date,
+        container: {
+          type: fields.container_type,
+          availableVolume: fields.container_available_volume,
+          minimumVolume: fields.container_minimum_volume
+        },
+        offerType: fields.offer_type,
+        announcementText: fields.announcement_text
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération pour modification:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur technique',
+      details: error.message
+    });
+  }
+});
+
+// Route pour sauvegarder les modifications d'une annonce
+app.post('/api/partage/update-announcement', async (req, res) => {
+  console.log('POST /api/partage/update-announcement appelé');
+  
+  try {
+    const { editToken, data } = req.body;
+    
+    if (!editToken || !data) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token et données requis'
+      });
+    }
+
+    // Validation des données obligatoires
+    const requiredFields = [
+      'contact.firstName', 'contact.email', 
+      'departure.country', 'departure.city',
+      'arrival.country', 'arrival.city',
+      'shippingDate', 'container.type', 'container.availableVolume',
+      'offerType', 'announcementText'
+    ];
+
+    for (const field of requiredFields) {
+      const fieldValue = field.split('.').reduce((obj, key) => obj?.[key], data);
+      if (!fieldValue) {
+        return res.status(400).json({
+          success: false,
+          error: `Champ manquant: ${field}`
+        });
+      }
+    }
+
+    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    
+    // Trouver l'annonce
+    const records = await base(partageTableName).select({
+      filterByFormula: `{edit_token} = '${editToken}'`,
+      maxRecords: 1
+    }).firstPage();
+
+    if (records.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Annonce non trouvée'
+      });
+    }
+
+    const recordId = records[0].id;
+    const oldData = records[0].fields;
+    
+    // Préparer les données mises à jour
+    const updatedFields = {
+      contact_first_name: data.contact.firstName,
+      contact_last_name: data.contact.lastName || '',
+      contact_email: data.contact.email,
+      contact_phone: data.contact.phone || '',
+      departure_country: data.departure.country,
+      departure_city: data.departure.city,
+      departure_postal_code: data.departure.postalCode || '',
+      arrival_country: data.arrival.country,
+      arrival_city: data.arrival.city,
+      arrival_postal_code: data.arrival.postalCode || '',
+      shipping_date: data.shippingDate,
+      container_type: data.container.type,
+      container_available_volume: parseFloat(data.container.availableVolume),
+      container_minimum_volume: parseFloat(data.container.minimumVolume || 0),
+      offer_type: data.offerType,
+      announcement_text: data.announcementText,
+      announcement_text_length: data.announcementText.length,
+      updated_at: new Date().toISOString()
+    };
+
+    // Mettre à jour l'enregistrement
+    const updatedRecord = await base(partageTableName).update(recordId, updatedFields);
+
+    console.log('✅ Annonce modifiée:', {
+      reference: oldData.reference,
+      updatedFields: Object.keys(updatedFields)
+    });
+
+    // Envoyer un email de confirmation de modification
+    try {
+      const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://partage.dodomove.fr';
+      const viewUrl = `${frontendUrl}/annonce/${oldData.reference}`;
+      
+      const { data: emailData, error: emailError } = await resend.emails.send({
+        from: 'DodoPartage <noreply@dodomove.fr>',
+        to: [data.contact.email],
+        subject: '✏️ Annonce DodoPartage modifiée avec succès',
+        html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Annonce modifiée - DodoPartage</title>
+        </head>
+        <body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; line-height: 1.6;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
+            
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #243163 0%, #1e2951 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="color: white; font-family: 'Inter', sans-serif; font-size: 28px; margin: 0; font-weight: 700;">
+                🚢 DodoPartage
+              </h1>
+              <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
+                Groupage collaboratif DOM-TOM
+              </p>
+            </div>
+            
+            <!-- Contenu principal -->
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #1e293b; font-size: 24px; margin: 0 0 20px 0; font-weight: 600;">
+                Modifications enregistrées ✏️
+              </h2>
+              
+              <p style="color: #475569; font-size: 16px; margin: 0 0 20px 0;">
+                Votre annonce <strong>${oldData.reference}</strong> a été mise à jour avec succès.
+              </p>
+              
+              <!-- Message de confirmation -->
+              <div style="border-left: 4px solid #3b82f6; background-color: #eff6ff; padding: 20px; margin: 30px 0;">
+                <div style="display: flex; align-items: center;">
+                  <span style="font-size: 20px; margin-right: 12px;">✏️</span>
+                  <div>
+                    <h3 style="color: #1d4ed8; font-size: 16px; margin: 0 0 4px 0; font-weight: 600;">
+                      Annonce mise à jour
+                    </h3>
+                    <p style="color: #1e40af; font-size: 14px; margin: 0; line-height: 1.4;">
+                      Vos modifications sont maintenant visibles sur la plateforme
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Bouton pour voir l'annonce -->
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="${viewUrl}" 
+                   style="display: inline-block; background-color: #F47D6C; color: white; padding: 16px 32px; 
+                          text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                  🔍 Voir mon annonce mise à jour
+                </a>
+              </div>
+              
+              <!-- Informations utiles -->
+              <div style="text-align: center; margin: 24px 0;">
+                <p style="color: #6b7280; font-size: 13px; margin: 0;">
+                  💡 Les utilisateurs verront immédiatement vos modifications
+                </p>
+              </div>
+              
+            </div>
+            
+            <!-- Footer -->
+            <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+                © 2024 DodoPartage - Une initiative 
+                <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+              </p>
+            </div>
+            
+          </div>
+        </body>
+        </html>
+        `,
+      });
+
+      if (!emailError) {
+        console.log('✅ Email de confirmation de modification envoyé:', emailData.id);
+      }
+    } catch (emailError) {
+      console.error('❌ Erreur email confirmation modification:', emailError);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Annonce modifiée avec succès',
+      data: {
+        reference: oldData.reference,
+        updatedAt: updatedFields.updated_at
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la modification:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la modification',
+      details: error.message
+    });
+  }
+});
+
 // Route pour envoyer un message de contact pour une annonce DodoPartage
 app.post('/api/partage/contact-announcement', async (req, res) => {
   console.log('POST /api/partage/contact-announcement appelé');
@@ -2801,6 +3072,8 @@ server.listen(PORT, host, () => {
   console.log('- GET /api/partage/test (DodoPartage)');
   console.log('- GET /api/partage/get-announcements (DodoPartage)');
   console.log('- GET /api/partage/validate-announcement (DodoPartage)');
+  console.log('- GET /api/partage/edit-form/:token (DodoPartage)');
+  console.log('- POST /api/partage/update-announcement (DodoPartage)');
   console.log('- GET /api/partage/delete-form/:token (DodoPartage)');
   console.log('- POST /api/partage/confirm-deletion (DodoPartage)');
   console.log('- POST /api/partage/contact-announcement (DodoPartage)');
