@@ -231,7 +231,7 @@ app.post('/send-email', async (req, res) => {
     // Envoyer l'email via Resend
     console.log('Envoi de l\'email via Resend...');
     const { data, error } = await resend.emails.send({
-      from: 'Dodomove <pierre.bost.pro@resend.dev>',
+      from: 'Dodomove <noreply@dodomove.fr>',
       to: [email],
       subject: 'Estimation de votre volume de déménagement 📦',
       html: `
@@ -1394,7 +1394,7 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
       console.log('🔑 Token de validation utilisé:', validationToken);
       
       const { data: emailData, error: emailError } = await resend.emails.send({
-        from: 'DodoPartage <pierre.bost.pro@resend.dev>',
+        from: 'DodoPartage <noreply@dodomove.fr>',
         to: [data.contact.email],
         subject: '🚢 Validez votre annonce DodoPartage',
         html: `
@@ -1993,7 +1993,7 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
       console.log('📧 Envoi de l\'email de contact...');
       
       const { data: emailData, error: emailError } = await resend.emails.send({
-        from: 'DodoPartage <pierre.bost.pro@resend.dev>',
+        from: 'DodoPartage <noreply@dodomove.fr>',
         to: [authorEmail],
         cc: [contactEmail], // Copie à l'expéditeur
         subject: `📬 Nouveau contact pour votre annonce ${reference}`,
