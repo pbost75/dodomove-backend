@@ -1807,6 +1807,139 @@ app.get('/api/partage/validate-announcement', async (req, res) => {
       reference: updatedRecord.fields.reference,
       newStatus: updatedRecord.fields.status
     });
+
+    // Générer des tokens pour la gestion de l'annonce
+    const editToken = 'edit_' + Date.now() + '_' + Math.random().toString(36).substr(2, 15);
+    const deleteToken = 'del_' + Date.now() + '_' + Math.random().toString(36).substr(2, 15);
+    
+    // Mettre à jour avec les tokens de gestion
+    await base(partageTableName).update(recordId, {
+      edit_token: editToken,
+      delete_token: deleteToken
+    });
+
+    // Envoyer l'email de confirmation post-validation
+    try {
+      const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://partage.dodomove.fr';
+      const viewUrl = `${frontendUrl}/annonce/${updatedRecord.fields.reference}`;
+      const editUrl = `${frontendUrl}/modifier/${editToken}`;
+      const deleteUrl = `${frontendUrl}/supprimer/${deleteToken}`;
+      
+      console.log('📧 Envoi de l\'email de confirmation post-validation...');
+      
+      const { data: emailData, error: emailError } = await resend.emails.send({
+        from: 'DodoPartage <noreply@dodomove.fr>',
+        to: [updatedRecord.fields.contact_email],
+        subject: '✅ Votre annonce DodoPartage est maintenant publiée !',
+        html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Annonce publiée - DodoPartage</title>
+        </head>
+        <body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; line-height: 1.6;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
+            
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #243163 0%, #1e2951 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="color: white; font-family: 'Inter', sans-serif; font-size: 28px; margin: 0; font-weight: 700;">
+                🚢 DodoPartage
+              </h1>
+              <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
+                Groupage collaboratif DOM-TOM
+              </p>
+            </div>
+            
+            <!-- Contenu principal -->
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #1e293b; font-size: 24px; margin: 0 0 20px 0; font-weight: 600;">
+                Félicitations ${updatedRecord.fields.contact_first_name} ! 🎉
+              </h2>
+              
+              <p style="color: #475569; font-size: 16px; margin: 0 0 20px 0;">
+                Votre annonce <strong>${updatedRecord.fields.reference}</strong> est maintenant <strong style="color: #10b981;">publiée</strong> et visible par tous les utilisateurs !
+              </p>
+              
+              <!-- Message de succès -->
+              <div style="border-left: 4px solid #10b981; background-color: #f0fdf4; padding: 20px; margin: 30px 0;">
+                <div style="display: flex; align-items: center;">
+                  <span style="font-size: 20px; margin-right: 12px;">✅</span>
+                  <div>
+                    <h3 style="color: #15803d; font-size: 16px; margin: 0 0 4px 0; font-weight: 600;">
+                      Annonce active
+                    </h3>
+                    <p style="color: #166534; font-size: 14px; margin: 0; line-height: 1.4;">
+                      Les utilisateurs peuvent maintenant vous contacter pour organiser un groupage
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Bouton principal -->
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="${viewUrl}" 
+                   style="display: inline-block; background-color: #F47D6C; color: white; padding: 16px 32px; 
+                          text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                  🔍 Voir mon annonce
+                </a>
+              </div>
+              
+              <!-- Actions de gestion -->
+              <div style="background-color: #f9fafb; border-radius: 8px; padding: 24px; margin: 30px 0;">
+                <h4 style="color: #374151; margin: 0 0 16px 0; font-size: 16px; font-weight: 600;">
+                  Gérer votre annonce :
+                </h4>
+                
+                <div style="text-align: center;">
+                  <a href="${editUrl}" 
+                     style="display: inline-block; background-color: #6b7280; color: white; padding: 12px 24px; 
+                            text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 14px; margin: 0 8px 8px 0;">
+                    ✏️ Modifier
+                  </a>
+                  
+                  <a href="${deleteUrl}" 
+                     style="display: inline-block; background-color: #dc2626; color: white; padding: 12px 24px; 
+                            text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 14px; margin: 0 8px 8px 0;">
+                    🗑️ Supprimer
+                  </a>
+                </div>
+              </div>
+              
+              <!-- Informations utiles -->
+              <div style="text-align: center; margin: 24px 0;">
+                <p style="color: #6b7280; font-size: 13px; margin: 0;">
+                  💡 Vous recevrez un email à chaque nouvelle demande de contact
+                </p>
+              </div>
+              
+            </div>
+            
+            <!-- Footer -->
+            <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+                © 2024 DodoPartage - Une initiative 
+                <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+              </p>
+            </div>
+            
+          </div>
+        </body>
+        </html>
+        `,
+      });
+
+      if (emailError) {
+        console.error('❌ Erreur email confirmation:', emailError);
+      } else {
+        console.log('✅ Email de confirmation envoyé:', emailData.id);
+      }
+      
+    } catch (emailError) {
+      console.error('❌ Erreur lors de l\'envoi de l\'email de confirmation:', emailError);
+      // On continue même si l'email échoue
+    }
     
     // Réponse de succès pour redirection côté frontend
     res.status(200).json({
@@ -1815,7 +1948,9 @@ app.get('/api/partage/validate-announcement', async (req, res) => {
       data: {
         reference: updatedRecord.fields.reference,
         status: 'published',
-        validatedAt: updatedRecord.fields.validated_at
+        validatedAt: updatedRecord.fields.validated_at,
+        editToken: editToken,
+        deleteToken: deleteToken
       }
     });
     
@@ -2028,6 +2163,222 @@ app.get('/api/partage/get-announcements', async (req, res) => {
         timestamp: new Date().toISOString(),
         error: true
       }
+    });
+  }
+});
+
+// Route pour afficher le formulaire de suppression avec questionnaire
+app.get('/api/partage/delete-form/:token', async (req, res) => {
+  console.log('GET /api/partage/delete-form appelé avec token:', req.params.token);
+  
+  try {
+    const deleteToken = req.params.token;
+    
+    if (!deleteToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token de suppression manquant'
+      });
+    }
+
+    // Vérifier que l'annonce existe avec ce token
+    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    
+    const records = await base(partageTableName).select({
+      filterByFormula: `{delete_token} = '${deleteToken}'`,
+      maxRecords: 1
+    }).firstPage();
+
+    if (records.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Annonce non trouvée ou token invalide'
+      });
+    }
+
+    const announcement = records[0];
+    
+    // Retourner les informations de l'annonce pour affichage
+    res.status(200).json({
+      success: true,
+      data: {
+        reference: announcement.fields.reference,
+        departure: announcement.fields.departure_city,
+        arrival: announcement.fields.arrival_city,
+        contact_name: announcement.fields.contact_first_name
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération pour suppression:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur technique',
+      details: error.message
+    });
+  }
+});
+
+// Route pour traiter la suppression avec raison
+app.post('/api/partage/confirm-deletion', async (req, res) => {
+  console.log('POST /api/partage/confirm-deletion appelé');
+  
+  try {
+    const { deleteToken, reason } = req.body;
+    
+    if (!deleteToken || !reason) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token et raison requis'
+      });
+    }
+
+    // Valider la raison
+    const validReasons = ['found_solution', 'plans_changed', 'other'];
+    if (!validReasons.includes(reason)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Raison invalide'
+      });
+    }
+
+    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    
+    // Trouver l'annonce
+    const records = await base(partageTableName).select({
+      filterByFormula: `{delete_token} = '${deleteToken}'`,
+      maxRecords: 1
+    }).firstPage();
+
+    if (records.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Annonce non trouvée'
+      });
+    }
+
+    const recordId = records[0].id;
+    const announcement = records[0].fields;
+    
+    // Mettre à jour l'enregistrement avec la raison et le statut supprimé
+    await base(partageTableName).update(recordId, {
+      status: 'deleted',
+      deletion_reason: reason,
+      deleted_at: new Date().toISOString(),
+      delete_token: null // Supprimer le token pour éviter les suppressions multiples
+    });
+
+    console.log('✅ Annonce supprimée:', {
+      reference: announcement.reference,
+      reason: reason
+    });
+
+    // Envoyer un email de confirmation de suppression
+    try {
+      const { data: emailData, error: emailError } = await resend.emails.send({
+        from: 'DodoPartage <noreply@dodomove.fr>',
+        to: [announcement.contact_email],
+        subject: '🗑️ Annonce DodoPartage supprimée',
+        html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Annonce supprimée - DodoPartage</title>
+        </head>
+        <body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; line-height: 1.6;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
+            
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #243163 0%, #1e2951 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="color: white; font-family: 'Inter', sans-serif; font-size: 28px; margin: 0; font-weight: 700;">
+                🚢 DodoPartage
+              </h1>
+              <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
+                Groupage collaboratif DOM-TOM
+              </p>
+            </div>
+            
+            <!-- Contenu principal -->
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #1e293b; font-size: 24px; margin: 0 0 20px 0; font-weight: 600;">
+                Annonce supprimée ✅
+              </h2>
+              
+              <p style="color: #475569; font-size: 16px; margin: 0 0 20px 0;">
+                Votre annonce <strong>${announcement.reference}</strong> a été supprimée avec succès.
+              </p>
+              
+              <!-- Message de confirmation -->
+              <div style="border-left: 4px solid #6b7280; background-color: #f9fafb; padding: 20px; margin: 30px 0;">
+                <div style="display: flex; align-items: center;">
+                  <span style="font-size: 20px; margin-right: 12px;">ℹ️</span>
+                  <div>
+                    <h3 style="color: #374151; font-size: 16px; margin: 0 0 4px 0; font-weight: 600;">
+                      Suppression confirmée
+                    </h3>
+                    <p style="color: #6b7280; font-size: 14px; margin: 0; line-height: 1.4;">
+                      Votre annonce n'est plus visible sur la plateforme
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Bouton pour créer une nouvelle annonce -->
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="https://partage.dodomove.fr/funnel/propose" 
+                   style="display: inline-block; background-color: #F47D6C; color: white; padding: 16px 32px; 
+                          text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                  ➕ Créer une nouvelle annonce
+                </a>
+              </div>
+              
+              <!-- Message de remerciement -->
+              <div style="text-align: center; margin: 24px 0;">
+                <p style="color: #6b7280; font-size: 14px; margin: 0;">
+                  Merci d'avoir utilisé DodoPartage ! 💙
+                </p>
+              </div>
+              
+            </div>
+            
+            <!-- Footer -->
+            <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+                © 2024 DodoPartage - Une initiative 
+                <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+              </p>
+            </div>
+            
+          </div>
+        </body>
+        </html>
+        `,
+      });
+
+      if (!emailError) {
+        console.log('✅ Email de confirmation de suppression envoyé:', emailData.id);
+      }
+    } catch (emailError) {
+      console.error('❌ Erreur email confirmation suppression:', emailError);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Annonce supprimée avec succès',
+      data: {
+        reference: announcement.reference,
+        reason: reason
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la suppression:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la suppression',
+      details: error.message
     });
   }
 });
@@ -2450,6 +2801,8 @@ server.listen(PORT, host, () => {
   console.log('- GET /api/partage/test (DodoPartage)');
   console.log('- GET /api/partage/get-announcements (DodoPartage)');
   console.log('- GET /api/partage/validate-announcement (DodoPartage)');
+  console.log('- GET /api/partage/delete-form/:token (DodoPartage)');
+  console.log('- POST /api/partage/confirm-deletion (DodoPartage)');
   console.log('- POST /api/partage/contact-announcement (DodoPartage)');
   console.log('- GET /test-email-validation (Test email)');
 });
