@@ -200,14 +200,103 @@ app.post('/send-email', async (req, res) => {
   console.log('Body reçu:', req.body);
   
   try {
-    const { email, name, items, totalVolume, movingTimelineText } = req.body;
+    // Détecter le type d'email selon les données reçues
+    const { type, email, name, items, totalVolume, movingTimelineText, 
+            requestId, customerEmail, customerPhone, subject, message } = req.body;
     
-    // Vérification des données requises
+    // ROUTE POUR LES EMAILS DE CONTACT DU FUNNEL
+    if (type === 'contact_support' || (requestId && customerEmail && subject && message)) {
+      console.log('🎯 Email de contact du funnel détecté');
+      
+      const clientEmail = customerEmail || email;
+      
+      // Vérification des données requises pour le contact
+      if (!clientEmail || !subject || !message) {
+        console.error('Données de contact manquantes:', { clientEmail, subject, message });
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Données de contact manquantes',
+          received: { 
+            hasEmail: !!clientEmail, 
+            hasSubject: !!subject, 
+            hasMessage: !!message 
+          }
+        });
+      }
+      
+      // Envoyer l'email de contact via Resend
+      console.log('Envoi de l\'email de contact via Resend...');
+      const { data, error } = await resend.emails.send({
+        from: 'DodoMove Support <noreply@dodomove.fr>',
+        to: ['bost.analytics@gmail.com'], // Email de support
+        replyTo: [clientEmail], // Permettre de répondre directement au client
+        subject: `[Contact Funnel] ${subject}`,
+        html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 5px; overflow: hidden;">
+          <!-- En-tête -->
+          <div style="background-color: #4285F4; padding: 20px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">DodoMove - Contact Funnel</h1>
+          </div>
+          
+          <!-- Contenu principal -->
+          <div style="padding: 20px; background-color: white;">
+            <h2 style="color: #333; font-size: 22px;">Nouveau message de contact 📧</h2>
+            
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+              <p><strong>Référence de demande :</strong> ${requestId || 'Non spécifiée'}</p>
+              <p><strong>Email client :</strong> ${clientEmail}</p>
+              ${customerPhone ? `<p><strong>Téléphone :</strong> ${customerPhone}</p>` : ''}
+              <p><strong>Sujet :</strong> ${subject}</p>
+              <p><strong>Date :</strong> ${new Date().toLocaleString('fr-FR')}</p>
+            </div>
+            
+            <div style="background-color: white; border: 1px solid #ddd; padding: 20px; border-radius: 5px;">
+              <h3 style="margin-top: 0; color: #333;">Message du client :</h3>
+              <p style="white-space: pre-wrap; line-height: 1.6;">${message}</p>
+            </div>
+            
+            <div style="text-align: center; margin: 25px 0;">
+              <a href="mailto:${clientEmail}" style="display: inline-block; background-color: #4285F4; color: white; padding: 15px 25px; text-decoration: none; border-radius: 5px; font-weight: 500;">
+                Répondre au client
+              </a>
+            </div>
+          </div>
+          
+          <!-- Pied de page -->
+          <div style="text-align: center; padding: 15px; background-color: #f8f9fa; color: #666; font-size: 12px; border-top: 1px solid #e0e0e0;">
+            <p>© 2024 DodoMove - Email automatique depuis le funnel</p>
+          </div>
+        </div>
+        `,
+      });
+      
+      if (error) {
+        console.error('Erreur Resend pour email de contact:', error);
+        return res.status(500).json({ 
+          success: false, 
+          error: `Erreur lors de l'envoi de l'email de contact: ${error.message}` 
+        });
+      }
+      
+      console.log('Email de contact envoyé avec succès, ID:', data.id);
+      
+      // Répondre avec succès
+      return res.status(200).json({ 
+        success: true,
+        message: `Email de contact envoyé avec succès depuis ${clientEmail}`,
+        emailId: data.id
+      });
+    }
+    
+    // ROUTE POUR LES ESTIMATIONS DE VOLUME (comportement original)
+    console.log('📦 Email d\'estimation de volume détecté');
+    
+    // Vérification des données requises pour l'estimation
     if (!email || !items || totalVolume === undefined) {
-      console.error('Données manquantes:', { email, items, totalVolume });
+      console.error('Données d\'estimation manquantes:', { email, items, totalVolume });
       return res.status(400).json({ 
         success: false, 
-        error: 'Données manquantes',
+        error: 'Données d\'estimation manquantes',
         received: { 
           hasEmail: !!email, 
           hasItems: !!items, 
