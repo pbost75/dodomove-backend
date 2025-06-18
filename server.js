@@ -1532,61 +1532,109 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
                 a bien été reçue !
               </p>
               
-              <!-- Message d'urgence clair -->
-              <div style="background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%); border: 2px solid #F59E0B; border-radius: 12px; padding: 25px; margin: 30px 0; text-align: center;">
-                <h3 style="color: #92400E; font-size: 18px; margin: 0 0 15px 0; font-weight: 700;">
-                  ⚠️ ÉTAPE OBLIGATOIRE
-                </h3>
-                <p style="color: #78350F; font-size: 16px; margin: 0; font-weight: 600;">
-                  Votre annonce <strong>ne sera PAS visible</strong> tant que vous n'aurez pas cliqué sur le bouton ci-dessous
+              <!-- Message d'urgence moderne et élégant -->
+              <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 20px; padding: 35px; margin: 35px 0; text-align: center; position: relative; overflow: hidden;">
+                <!-- Effet brillant subtil -->
+                <div style="position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);"></div>
+                
+                <div style="position: relative; z-index: 2;">
+                  <div style="width: 60px; height: 60px; background: rgba(255,255,255,0.2); border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px);">
+                    <span style="font-size: 24px;">⚡</span>
+                  </div>
+                  
+                  <h3 style="color: white; font-size: 20px; margin: 0 0 12px 0; font-weight: 600; letter-spacing: 0.5px;">
+                    Action requise
+                  </h3>
+                  
+                  <p style="color: rgba(255,255,255,0.95); font-size: 16px; margin: 0; font-weight: 400; line-height: 1.5;">
+                    Votre annonce <strong style="color: white;">ne sera pas visible</strong> tant que vous n'aurez pas confirmé votre email
+                  </p>
+                </div>
+              </div>
+              
+              <!-- Bouton CTA moderne et élégant -->
+              <div style="text-align: center; margin: 45px 0;">
+                <table style="margin: 0 auto;">
+                  <tr>
+                    <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50px; padding: 0; box-shadow: 0 8px 25px rgba(102, 126, 234, 0.35);">
+                      <a href="${validationUrl}" 
+                         style="display: inline-block; background: transparent; color: white; padding: 18px 45px; 
+                                text-decoration: none; border-radius: 50px; font-weight: 600; font-size: 16px; 
+                                letter-spacing: 0.5px; position: relative; overflow: hidden;">
+                        <!-- Effet hover subtil -->
+                        <span style="position: relative; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                          <span style="font-size: 18px;">✨</span>
+                          <span>Confirmer mon annonce</span>
+                        </span>
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+                
+                <!-- Petit texte sous le bouton -->
+                <p style="color: #64748b; font-size: 13px; margin: 15px 0 0 0; font-style: italic;">
+                  Un simple clic pour publier votre annonce
                 </p>
               </div>
               
-              <!-- Bouton de validation principal plus gros -->
-              <div style="text-align: center; margin: 40px 0;">
-                <a href="${validationUrl}" 
-                   style="display: inline-block; background: linear-gradient(135deg, #F47D6C 0%, #E11D48 100%); 
-                          color: white; padding: 20px 40px; text-decoration: none; border-radius: 12px; 
-                          font-weight: 700; font-size: 18px; box-shadow: 0 6px 20px rgba(244, 125, 108, 0.4); 
-                          transition: all 0.2s; border: 3px solid #F47D6C;">
-                  ✅ JE CONFIRME MON ANNONCE
-                </a>
+              <!-- Explications élégantes -->
+              <div style="background: linear-gradient(145deg, #f8faff 0%, #f1f5ff 100%); border-radius: 16px; padding: 30px; margin: 35px 0; border: 1px solid #e2e8f0;">
+                <div style="display: flex; align-items: center; margin-bottom: 20px;">
+                  <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-right: 15px;">
+                    <span style="color: white; font-size: 18px;">📋</span>
+                  </div>
+                  <h4 style="color: #1e293b; margin: 0; font-size: 18px; font-weight: 600;">
+                    Que se passe-t-il après confirmation ?
+                  </h4>
+                </div>
+                
+                <div style="space-y: 12px;">
+                  <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                    <span style="color: #10b981; margin-right: 12px; font-size: 16px;">✓</span>
+                    <span style="color: #374151; font-size: 15px;">Votre annonce devient <strong>visible</strong> sur partage.dodomove.fr</span>
+                  </div>
+                  <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                    <span style="color: #10b981; margin-right: 12px; font-size: 16px;">✓</span>
+                    <span style="color: #374151; font-size: 15px;">Les autres utilisateurs peuvent vous <strong>contacter</strong> directement</span>
+                  </div>
+                  <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                    <span style="color: #10b981; margin-right: 12px; font-size: 16px;">✓</span>
+                    <span style="color: #374151; font-size: 15px;">Vous recevez les demandes par <strong>email</strong> en temps réel</span>
+                  </div>
+                  <div style="display: flex; align-items: center;">
+                    <span style="color: #10b981; margin-right: 12px; font-size: 16px;">✓</span>
+                    <span style="color: #374151; font-size: 15px;">Vous organisez votre <strong>groupage</strong> avec vos partenaires</span>
+                  </div>
+                </div>
               </div>
               
-              <!-- Explications pédagogiques -->
-              <div style="background-color: #F0F9FF; border-left: 4px solid #0284C7; padding: 25px; border-radius: 8px; margin: 30px 0;">
-                <h4 style="color: #0C4A6E; margin: 0 0 15px 0; font-size: 16px; font-weight: 600;">
-                  📋 Que se passe-t-il après confirmation ?
-                </h4>
-                <ul style="color: #075985; margin: 0; padding-left: 20px; line-height: 1.8;">
-                  <li><strong>Votre annonce devient visible</strong> sur partage.dodomove.fr</li>
-                  <li><strong>Les autres utilisateurs peuvent vous contacter</strong> directement</li>
-                  <li><strong>Vous recevez les demandes par email</strong> en temps réel</li>
-                  <li><strong>Vous organisez votre groupage</strong> avec vos partenaires</li>
-                </ul>
+              <!-- Informations sécurité et expiration regroupées -->
+              <div style="background: white; border-radius: 16px; padding: 25px; margin: 35px 0; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <div style="text-align: center; margin-bottom: 20px;">
+                  <div style="display: inline-flex; align-items: center; background: #f0fdf4; padding: 8px 16px; border-radius: 20px; margin-bottom: 15px;">
+                    <span style="color: #15803d; margin-right: 8px; font-size: 16px;">🔒</span>
+                    <span style="color: #15803d; font-size: 14px; font-weight: 500;">Sécurisé et anti-spam</span>
+                  </div>
+                </div>
+                
+                <div style="text-align: center; padding: 15px; background: #fafafa; border-radius: 12px;">
+                  <p style="color: #374151; font-size: 14px; margin: 0 0 5px 0; font-weight: 500; display: flex; align-items: center; justify-content: center;">
+                    <span style="margin-right: 8px;">⏰</span>
+                    <span>Lien valide 7 jours</span>
+                  </p>
+                  <p style="color: #6b7280; font-size: 12px; margin: 0;">
+                    Passé ce délai, vous devrez recréer votre annonce
+                  </p>
+                </div>
               </div>
               
-              <!-- Message de sécurité plus visible -->
-              <div style="background-color: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 20px; margin: 30px 0; text-align: center;">
-                <p style="color: #B91C1C; margin: 0; font-size: 14px; font-weight: 600;">
-                  🔒 Cette confirmation sécurise votre annonce et évite le spam
-                </p>
+              <!-- Note finale moderne -->
+              <div style="text-align: center; margin: 30px 0 0 0;">
+                <div style="display: inline-flex; align-items: center; background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 12px 24px; border-radius: 25px; color: white; font-size: 14px; font-weight: 500;">
+                  <span style="margin-right: 8px; font-size: 16px;">💚</span>
+                  <span>Merci de faire confiance à DodoPartage</span>
+                </div>
               </div>
-              
-              <!-- Expiration plus visible -->
-              <div style="text-align: center; background-color: #F3F4F6; padding: 15px; border-radius: 8px; margin: 30px 0;">
-                <p style="color: #374151; font-size: 14px; margin: 0; font-weight: 600;">
-                  ⏰ Ce lien expire dans 7 jours
-                </p>
-                <p style="color: #6B7280; font-size: 13px; margin: 5px 0 0 0;">
-                  Passé ce délai, vous devrez recréer votre annonce
-                </p>
-              </div>
-              
-              <!-- Note finale encourageante -->
-              <p style="color: #059669; font-size: 15px; text-align: center; margin: 20px 0 0 0; font-weight: 600;">
-                💚 Merci de faire confiance à DodoPartage pour votre transport !
-              </p>
             </div>
             
             <!-- Footer simple -->
