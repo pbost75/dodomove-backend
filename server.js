@@ -2318,6 +2318,216 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
   }
 });
 
+// Route de test pour visualiser l'email de validation DodoPartage
+app.get('/test-email-validation', async (req, res) => {
+  console.log('GET /test-email-validation appelé');
+  
+  try {
+    // Données de test
+    const testData = {
+      contact: {
+        firstName: 'Pierre',
+        email: 'bost.analytics@gmail.com'
+      },
+      departure: {
+        displayName: 'France (Paris)'
+      },
+      arrival: {
+        displayName: 'Martinique (Fort-de-France)'
+      }
+    };
+    
+    const testValidationToken = 'test-token-' + Date.now();
+    const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://partage.dodomove.fr';
+    const validationUrl = `${frontendUrl}/api/validate-announcement?token=${testValidationToken}`;
+    
+    console.log('📧 Envoi de l\'email de test...');
+    
+    const { data: emailData, error: emailError } = await resend.emails.send({
+      from: 'DodoPartage <noreply@dodomove.fr>',
+      to: ['bost.analytics@gmail.com'],
+      subject: '🚨 [TEST] Confirmez votre annonce DodoPartage',
+      html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Confirmez votre annonce DodoPartage</title>
+      </head>
+      <body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; line-height: 1.6;">
+        <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
+          
+          <!-- Header moderne avec les bonnes couleurs -->
+          <div style="background: linear-gradient(135deg, #243163 0%, #1e2951 100%); padding: 40px 30px; text-align: center;">
+            <h1 style="color: white; font-family: 'Inter', sans-serif; font-size: 28px; margin: 0; font-weight: 700;">
+              🚢 DodoPartage
+            </h1>
+            <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
+              Groupage collaboratif DOM-TOM
+            </p>
+          </div>
+          
+          <!-- Contenu principal -->
+          <div style="padding: 40px 30px;">
+            <h2 style="color: #1e293b; font-size: 24px; margin: 0 0 20px 0; font-weight: 600;">
+              Bonjour ${testData.contact.firstName} 👋
+            </h2>
+            
+            <p style="color: #475569; font-size: 16px; margin: 0 0 20px 0;">
+              Votre annonce de groupage <strong>${testData.departure.displayName} → ${testData.arrival.displayName}</strong> 
+              a bien été reçue !
+            </p>
+            
+            <!-- Message d'urgence moderne et élégant -->
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 20px; padding: 35px; margin: 35px 0; text-align: center; position: relative; overflow: hidden;">
+              <!-- Effet brillant subtil -->
+              <div style="position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);"></div>
+              
+              <div style="position: relative; z-index: 2;">
+                <div style="width: 60px; height: 60px; background: rgba(255,255,255,0.2); border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px);">
+                  <span style="font-size: 24px;">⚡</span>
+                </div>
+                
+                <h3 style="color: white; font-size: 20px; margin: 0 0 12px 0; font-weight: 600; letter-spacing: 0.5px;">
+                  Action requise
+                </h3>
+                
+                <p style="color: rgba(255,255,255,0.95); font-size: 16px; margin: 0; font-weight: 400; line-height: 1.5;">
+                  Votre annonce <strong style="color: white;">ne sera pas visible</strong> tant que vous n'aurez pas confirmé votre email
+                </p>
+              </div>
+            </div>
+            
+            <!-- Bouton CTA moderne et élégant -->
+            <div style="text-align: center; margin: 45px 0;">
+              <table style="margin: 0 auto;">
+                <tr>
+                  <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50px; padding: 0; box-shadow: 0 8px 25px rgba(102, 126, 234, 0.35);">
+                    <a href="${validationUrl}" 
+                       style="display: inline-block; background: transparent; color: white; padding: 18px 45px; 
+                              text-decoration: none; border-radius: 50px; font-weight: 600; font-size: 16px; 
+                              letter-spacing: 0.5px; position: relative; overflow: hidden;">
+                      <!-- Effet hover subtil -->
+                      <span style="position: relative; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <span style="font-size: 18px;">✨</span>
+                        <span>Confirmer mon annonce</span>
+                      </span>
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Petit texte sous le bouton -->
+              <p style="color: #64748b; font-size: 13px; margin: 15px 0 0 0; font-style: italic;">
+                Un simple clic pour publier votre annonce
+              </p>
+            </div>
+            
+            <!-- Explications élégantes -->
+            <div style="background: linear-gradient(145deg, #f8faff 0%, #f1f5ff 100%); border-radius: 16px; padding: 30px; margin: 35px 0; border: 1px solid #e2e8f0;">
+              <div style="display: flex; align-items: center; margin-bottom: 20px;">
+                <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-right: 15px;">
+                  <span style="color: white; font-size: 18px;">📋</span>
+                </div>
+                <h4 style="color: #1e293b; margin: 0; font-size: 18px; font-weight: 600;">
+                  Que se passe-t-il après confirmation ?
+                </h4>
+              </div>
+              
+              <div style="space-y: 12px;">
+                <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                  <span style="color: #10b981; margin-right: 12px; font-size: 16px;">✓</span>
+                  <span style="color: #374151; font-size: 15px;">Votre annonce devient <strong>visible</strong> sur partage.dodomove.fr</span>
+                </div>
+                <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                  <span style="color: #10b981; margin-right: 12px; font-size: 16px;">✓</span>
+                  <span style="color: #374151; font-size: 15px;">Les autres utilisateurs peuvent vous <strong>contacter</strong> directement</span>
+                </div>
+                <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                  <span style="color: #10b981; margin-right: 12px; font-size: 16px;">✓</span>
+                  <span style="color: #374151; font-size: 15px;">Vous recevez les demandes par <strong>email</strong> en temps réel</span>
+                </div>
+                <div style="display: flex; align-items: center;">
+                  <span style="color: #10b981; margin-right: 12px; font-size: 16px;">✓</span>
+                  <span style="color: #374151; font-size: 15px;">Vous organisez votre <strong>groupage</strong> avec vos partenaires</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Informations sécurité et expiration regroupées -->
+            <div style="background: white; border-radius: 16px; padding: 25px; margin: 35px 0; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+              <div style="text-align: center; margin-bottom: 20px;">
+                <div style="display: inline-flex; align-items: center; background: #f0fdf4; padding: 8px 16px; border-radius: 20px; margin-bottom: 15px;">
+                  <span style="color: #15803d; margin-right: 8px; font-size: 16px;">🔒</span>
+                  <span style="color: #15803d; font-size: 14px; font-weight: 500;">Sécurisé et anti-spam</span>
+                </div>
+              </div>
+              
+              <div style="text-align: center; padding: 15px; background: #fafafa; border-radius: 12px;">
+                <p style="color: #374151; font-size: 14px; margin: 0 0 5px 0; font-weight: 500; display: flex; align-items: center; justify-content: center;">
+                  <span style="margin-right: 8px;">⏰</span>
+                  <span>Lien valide 7 jours</span>
+                </p>
+                <p style="color: #6b7280; font-size: 12px; margin: 0;">
+                  Passé ce délai, vous devrez recréer votre annonce
+                </p>
+              </div>
+            </div>
+            
+            <!-- Note finale moderne -->
+            <div style="text-align: center; margin: 30px 0 0 0;">
+              <div style="display: inline-flex; align-items: center; background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 12px 24px; border-radius: 25px; color: white; font-size: 14px; font-weight: 500;">
+                <span style="margin-right: 8px; font-size: 16px;">💚</span>
+                <span>Merci de faire confiance à DodoPartage</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Footer simple -->
+          <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+            <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+              © 2024 DodoPartage - Une initiative 
+              <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+            </p>
+            <p style="color: #9CA3AF; font-size: 11px; margin: 5px 0 0 0;">
+              Si vous n'êtes pas à l'origine de cette demande, ignorez cet email
+            </p>
+          </div>
+          
+        </div>
+      </body>
+      </html>
+      `,
+    });
+
+    if (emailError) {
+      console.error('❌ Erreur email test:', emailError);
+      return res.status(500).json({ 
+        success: false, 
+        error: emailError.message 
+      });
+    }
+
+    console.log('✅ Email de test envoyé avec succès:', emailData.id);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Email de test envoyé à bost.analytics@gmail.com',
+      emailId: emailData.id,
+      testToken: testValidationToken
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors du test email:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de l\'envoi du test',
+      details: error.message
+    });
+  }
+});
+
 // Création du serveur HTTP
 const server = http.createServer(app);
 
@@ -2339,6 +2549,7 @@ server.listen(PORT, host, () => {
   console.log('- GET /api/partage/get-announcements (DodoPartage)');
   console.log('- GET /api/partage/validate-announcement (DodoPartage)');
   console.log('- POST /api/partage/contact-announcement (DodoPartage)');
+  console.log('- GET /test-email-validation (Test email)');
 });
 
 // Gestion des erreurs
