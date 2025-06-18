@@ -1485,14 +1485,14 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
       const { data: emailData, error: emailError } = await resend.emails.send({
         from: 'DodoPartage <noreply@dodomove.fr>',
         to: [data.contact.email],
-        subject: '🚢 Validez votre annonce DodoPartage',
+        subject: '🚨 ACTION REQUISE : Confirmez votre annonce DodoPartage',
         html: `
         <!DOCTYPE html>
         <html>
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Validez votre annonce DodoPartage</title>
+          <title>Confirmez votre annonce DodoPartage</title>
         </head>
         <body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; line-height: 1.6;">
           <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
@@ -1513,32 +1513,65 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
                 Bonjour ${data.contact.firstName} 👋
               </h2>
               
-              <p style="color: #475569; font-size: 16px; margin: 0 0 30px 0;">
+              <p style="color: #475569; font-size: 16px; margin: 0 0 20px 0;">
                 Votre annonce de groupage <strong>${data.departure.displayName} → ${data.arrival.displayName}</strong> 
                 a bien été reçue !
               </p>
               
-              <!-- Bouton de validation principal -->
-              <div style="text-align: center; margin: 40px 0;">
-                <a href="${validationUrl}" 
-                   style="display: inline-block; background-color: #F47D6C; color: white; padding: 18px 36px; 
-                          text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; 
-                          box-shadow: 0 4px 12px rgba(244, 125, 108, 0.3); transition: all 0.2s;">
-                  ✅ Valider mon annonce
-                </a>
-              </div>
-              
-              <!-- Information simple -->
-              <div style="background-color: #f1f5f9; border-left: 4px solid #243163; padding: 20px; border-radius: 8px; margin: 30px 0;">
-                <p style="color: #334155; margin: 0; font-size: 14px;">
-                  <strong>Une fois validée</strong>, votre annonce sera visible publiquement et vous recevrez 
-                  les demandes de contact par email.
+              <!-- Message d'urgence clair -->
+              <div style="background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%); border: 2px solid #F59E0B; border-radius: 12px; padding: 25px; margin: 30px 0; text-align: center;">
+                <h3 style="color: #92400E; font-size: 18px; margin: 0 0 15px 0; font-weight: 700;">
+                  ⚠️ ÉTAPE OBLIGATOIRE
+                </h3>
+                <p style="color: #78350F; font-size: 16px; margin: 0; font-weight: 600;">
+                  Votre annonce <strong>ne sera PAS visible</strong> tant que vous n'aurez pas cliqué sur le bouton ci-dessous
                 </p>
               </div>
               
-              <!-- Expiration -->
-              <p style="color: #64748b; font-size: 14px; text-align: center; margin: 30px 0 0 0;">
-                Ce lien expire dans 7 jours • Si vous n'êtes pas à l'origine de cette demande, ignorez cet email
+              <!-- Bouton de validation principal plus gros -->
+              <div style="text-align: center; margin: 40px 0;">
+                <a href="${validationUrl}" 
+                   style="display: inline-block; background: linear-gradient(135deg, #F47D6C 0%, #E11D48 100%); 
+                          color: white; padding: 20px 40px; text-decoration: none; border-radius: 12px; 
+                          font-weight: 700; font-size: 18px; box-shadow: 0 6px 20px rgba(244, 125, 108, 0.4); 
+                          transition: all 0.2s; border: 3px solid #F47D6C;">
+                  ✅ JE CONFIRME MON ANNONCE
+                </a>
+              </div>
+              
+              <!-- Explications pédagogiques -->
+              <div style="background-color: #F0F9FF; border-left: 4px solid #0284C7; padding: 25px; border-radius: 8px; margin: 30px 0;">
+                <h4 style="color: #0C4A6E; margin: 0 0 15px 0; font-size: 16px; font-weight: 600;">
+                  📋 Que se passe-t-il après confirmation ?
+                </h4>
+                <ul style="color: #075985; margin: 0; padding-left: 20px; line-height: 1.8;">
+                  <li><strong>Votre annonce devient visible</strong> sur partage.dodomove.fr</li>
+                  <li><strong>Les autres utilisateurs peuvent vous contacter</strong> directement</li>
+                  <li><strong>Vous recevez les demandes par email</strong> en temps réel</li>
+                  <li><strong>Vous organisez votre groupage</strong> avec vos partenaires</li>
+                </ul>
+              </div>
+              
+              <!-- Message de sécurité plus visible -->
+              <div style="background-color: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 20px; margin: 30px 0; text-align: center;">
+                <p style="color: #B91C1C; margin: 0; font-size: 14px; font-weight: 600;">
+                  🔒 Cette confirmation sécurise votre annonce et évite le spam
+                </p>
+              </div>
+              
+              <!-- Expiration plus visible -->
+              <div style="text-align: center; background-color: #F3F4F6; padding: 15px; border-radius: 8px; margin: 30px 0;">
+                <p style="color: #374151; font-size: 14px; margin: 0; font-weight: 600;">
+                  ⏰ Ce lien expire dans 7 jours
+                </p>
+                <p style="color: #6B7280; font-size: 13px; margin: 5px 0 0 0;">
+                  Passé ce délai, vous devrez recréer votre annonce
+                </p>
+              </div>
+              
+              <!-- Note finale encourageante -->
+              <p style="color: #059669; font-size: 15px; text-align: center; margin: 20px 0 0 0; font-weight: 600;">
+                💚 Merci de faire confiance à DodoPartage pour votre transport !
               </p>
             </div>
             
@@ -1547,6 +1580,9 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
               <p style="color: #94a3b8; font-size: 12px; margin: 0;">
                 © 2024 DodoPartage - Une initiative 
                 <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+              </p>
+              <p style="color: #9CA3AF; font-size: 11px; margin: 5px 0 0 0;">
+                Si vous n'êtes pas à l'origine de cette demande, ignorez cet email
               </p>
             </div>
             
