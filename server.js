@@ -1453,39 +1453,53 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
 
     // Enregistrer dans Airtable
     let airtableRecordId = null;
+    let airtableSuccess = false;
     try {
       console.log('📤 Envoi vers Airtable...');
+      console.log('🔍 Type d\'offre:', data.offerType);
       
       // Utiliser la table DodoPartage (cohérente avec les autres tables)
       const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+      console.log('📋 Table Airtable utilisée:', partageTableName);
       
       const records = await base(partageTableName).create([airtableData]);
       airtableRecordId = records[0].id;
+      airtableSuccess = true;
       
       console.log('✅ Annonce enregistrée dans Airtable:', airtableRecordId);
+      console.log('✅ Token validation stocké:', airtableData.fields.validation_token);
       
     } catch (airtableError) {
-      console.error('❌ Erreur Airtable:', airtableError);
+      console.error('❌ Erreur Airtable détaillée:', airtableError);
+      console.error('❌ Message d\'erreur:', airtableError.message);
+      console.error('❌ Stack trace:', airtableError.stack);
+      
+      // Afficher plus de détails sur l'erreur
+      if (airtableError.error) {
+        console.error('❌ Détails erreur Airtable:', JSON.stringify(airtableError.error, null, 2));
+      }
       
       // En cas d'erreur Airtable, on continue quand même pour ne pas bloquer l'utilisateur
       console.log('⚠️ Continuons sans Airtable pour ne pas bloquer l\'utilisateur');
+      console.log('⚠️ ATTENTION: Le token de validation ne sera pas disponible pour la validation !');
     }
 
-    // Envoyer l'email de validation via Resend
-    try {
-      console.log('📧 Envoi de l\'email de validation...');
-      
-      // Utiliser le token de validation déjà stocké dans Airtable
-      const validationToken = airtableData.fields.validation_token;
-      const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://partage.dodomove.fr';
-      const validationUrl = `${frontendUrl}/api/validate-announcement?token=${validationToken}`;
-      
-      console.log('🔑 Token de validation utilisé:', validationToken);
+    // Envoyer l'email de validation via Resend (seulement si Airtable a réussi)
+    if (airtableSuccess) {
+      try {
+        console.log('📧 Envoi de l\'email de validation...');
+        
+        // Utiliser le token de validation déjà stocké dans Airtable
+        const validationToken = airtableData.fields.validation_token;
+        const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://partage.dodomove.fr';
+        const validationUrl = `${frontendUrl}/api/validate-announcement?token=${validationToken}`;
+        
+        console.log('🔑 Token de validation utilisé:', validationToken);
       
       const { data: emailData, error: emailError } = await resend.emails.send({
         from: 'DodoPartage <noreply@dodomove.fr>',
         to: [data.contact.email],
-        subject: '🚨 ACTION REQUISE : Confirmez votre annonce DodoPartage',
+        subject: '🚨 Confirmez votre annonce DodoPartage',
         html: `
         <!DOCTYPE html>
         <html>
@@ -1592,40 +1606,54 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
         `,
       });
 
-      if (emailError) {
-        console.error('❌ Erreur email:', emailError);
-      } else {
-        console.log('✅ Email de validation envoyé avec succès:', emailData.id);
+        if (emailError) {
+          console.error('❌ Erreur email:', emailError);
+        } else {
+          console.log('✅ Email de validation envoyé avec succès:', emailData.id);
+        }
+        
+      } catch (emailError) {
+        console.error('❌ Erreur lors de l\'envoi de l\'email:', emailError);
+        // On continue même si l'email échoue
       }
-      
-    } catch (emailError) {
-      console.error('❌ Erreur lors de l\'envoi de l\'email:', emailError);
-      // On continue même si l'email échoue
+    } else {
+      console.log('⚠️ Email de validation NON envoyé car l\'enregistrement Airtable a échoué');
+      console.log('⚠️ L\'utilisateur recevra un message d\'erreur car son annonce ne pourra pas être validée');
     }
 
     // Libérer le verrou avant la réponse
     submissionInProgress.delete(submissionFingerprint);
     console.log('🔓 Verrou libéré après succès pour:', submissionFingerprint);
 
-    // Réponse de succès
-    res.status(200).json({
-      success: true,
-      message: 'Annonce créée avec succès !',
-      data: {
-        reference: reference,
-        recordId: airtableRecordId,
-        email: data.contact.email,
-        departure: data.departure.displayName,
-        arrival: data.arrival.displayName,
-        shippingDate: data.shippingDate,
-        status: 'En attente de validation'
-      },
-      nextSteps: [
-        'Votre annonce a été enregistrée dans notre base de données',
-        'Elle sera visible sur la plateforme après validation',
-        'Vous recevrez un email de confirmation sous peu'
-      ]
-    });
+    // Réponse de succès ou d'erreur selon le statut Airtable
+    if (airtableSuccess) {
+      res.status(200).json({
+        success: true,
+        message: 'Annonce créée avec succès !',
+        data: {
+          reference: reference,
+          recordId: airtableRecordId,
+          email: data.contact.email,
+          departure: data.departure.displayName,
+          arrival: data.arrival.displayName,
+          shippingDate: data.shippingDate,
+          status: 'En attente de validation'
+        },
+        nextSteps: [
+          'Votre annonce a été enregistrée dans notre base de données',
+          'Elle sera visible sur la plateforme après validation',
+          'Vous recevrez un email de confirmation sous peu'
+        ]
+      });
+    } else {
+      // Si Airtable a échoué, retourner une erreur
+      res.status(500).json({
+        success: false,
+        error: 'Erreur lors de l\'enregistrement de l\'annonce',
+        message: 'Une erreur technique s\'est produite lors de l\'enregistrement. Veuillez réessayer.',
+        details: 'Impossible d\'enregistrer l\'annonce dans la base de données'
+      });
+    }
 
   } catch (error) {
     console.error('❌ Erreur lors de la soumission DodoPartage:', error);
