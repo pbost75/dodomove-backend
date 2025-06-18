@@ -1550,7 +1550,7 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
               <!-- Bouton CTA minimaliste -->
               <div style="text-align: center; margin: 32px 0;">
                 <a href="${validationUrl}" 
-                   style="display: inline-block; background-color: #243163; color: white; padding: 14px 28px; 
+                   style="display: inline-block; background-color: #F47D6C; color: white; padding: 14px 28px; 
                           text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 15px;">
                   Confirmer mon email
                 </a>
@@ -2345,14 +2345,14 @@ app.get('/test-email-validation', async (req, res) => {
               </div>
             </div>
             
-            <!-- Bouton CTA minimaliste -->
-            <div style="text-align: center; margin: 32px 0;">
-              <a href="${validationUrl}" 
-                 style="display: inline-block; background-color: #243163; color: white; padding: 14px 28px; 
-                        text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 15px;">
-                Confirmer mon email
-              </a>
-            </div>
+                         <!-- Bouton CTA minimaliste -->
+             <div style="text-align: center; margin: 32px 0;">
+               <a href="${validationUrl}" 
+                  style="display: inline-block; background-color: #F47D6C; color: white; padding: 14px 28px; 
+                         text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 15px;">
+                 Confirmer mon email
+               </a>
+             </div>
             
             <!-- Explications simplifiées -->
             <div style="background-color: #f9fafb; border-radius: 8px; padding: 24px; margin: 30px 0;">
