@@ -3052,6 +3052,92 @@ app.get('/test-email-validation', async (req, res) => {
   }
 });
 
+// Route pour ajouter des tokens aux annonces existantes (temporaire pour migration)
+app.post('/api/partage/add-missing-tokens', async (req, res) => {
+  console.log('POST /api/partage/add-missing-tokens appelé');
+  
+  try {
+    const { action } = req.body;
+    
+    if (action !== 'add_tokens_to_existing') {
+      return res.status(400).json({
+        success: false,
+        error: 'Action non autorisée'
+      });
+    }
+
+    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    
+    console.log('🔍 Recherche des annonces sans tokens...');
+    
+    // Récupérer toutes les annonces publiées sans tokens
+    const records = await base(partageTableName).select({
+      filterByFormula: 'AND({status} = "published", OR(NOT({edit_token}), NOT({delete_token})))',
+      maxRecords: 50
+    }).firstPage();
+
+    console.log(`📋 Trouvé ${records.length} annonce(s) sans tokens complets`);
+    
+    if (records.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'Toutes les annonces ont déjà leurs tokens',
+        updated: 0
+      });
+    }
+
+    const updates = [];
+    
+    for (const record of records) {
+      const fields = record.fields;
+      
+      // Générer de nouveaux tokens s'ils manquent
+      const editToken = fields.edit_token || ('edit_retro_' + Date.now() + '_' + Math.random().toString(36).substr(2, 15));
+      const deleteToken = fields.delete_token || ('del_retro_' + Date.now() + '_' + Math.random().toString(36).substr(2, 15));
+      
+      console.log(`🔧 Ajout tokens pour ${fields.reference}:`);
+      console.log(`   Edit: ${editToken.substring(0, 25)}...`);
+      console.log(`   Delete: ${deleteToken.substring(0, 25)}...`);
+      
+      // Mettre à jour l'enregistrement
+      await base(partageTableName).update(record.id, {
+        edit_token: editToken,
+        delete_token: deleteToken
+      });
+      
+      updates.push({
+        id: record.id,
+        reference: fields.reference,
+        editToken,
+        deleteToken
+      });
+      
+      // Petite pause pour éviter de surcharger l'API Airtable
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    console.log(`✅ ${updates.length} annonce(s) mise(s) à jour avec succès`);
+    
+    res.status(200).json({
+      success: true,
+      message: `${updates.length} annonce(s) mise(s) à jour avec des tokens`,
+      updated: updates.length,
+      details: updates.map(u => ({
+        reference: u.reference,
+        hasTokens: true
+      }))
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur lors de l\'ajout des tokens:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de l\'ajout des tokens',
+      details: error.message
+    });
+  }
+});
+
 // Création du serveur HTTP
 const server = http.createServer(app);
 
@@ -3077,6 +3163,7 @@ server.listen(PORT, host, () => {
   console.log('- GET /api/partage/delete-form/:token (DodoPartage)');
   console.log('- POST /api/partage/confirm-deletion (DodoPartage)');
   console.log('- POST /api/partage/contact-announcement (DodoPartage)');
+  console.log('- POST /api/partage/add-missing-tokens (DodoPartage - Migration)');
   console.log('- GET /test-email-validation (Test email)');
 });
 
