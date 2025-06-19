@@ -1316,7 +1316,7 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
     }
 
     // Créer une empreinte unique de la soumission pour éviter les doublons IDENTIQUES
-    const submissionFingerprint = `${userEmail}-${data.departure.displayName}-${data.arrival.displayName}-${data.shippingDate}-${data.container.type}-${data.container.availableVolume}`;
+    const submissionFingerprint = `${userEmail}-${data.departureLocation}-${data.arrivalLocation}-${data.shippingDate}-${data.container.type}-${data.container.availableVolume}`;
     
     if (submissionInProgress.has(submissionFingerprint)) {
       console.log('⚠️ Soumission IDENTIQUE déjà en cours:', submissionFingerprint);
@@ -1528,7 +1528,7 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
               </h2>
               
               <p style="color: #475569; font-size: 16px; margin: 0 0 20px 0;">
-                Votre annonce de groupage <strong>${data.departure.displayName} → ${data.arrival.displayName}</strong> 
+                Votre annonce de groupage <strong>${data.departureLocation} → ${data.arrivalLocation}</strong> 
                 a bien été reçue !
               </p>
               
@@ -1633,8 +1633,8 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
           reference: reference,
           recordId: airtableRecordId,
           email: data.contact.email,
-          departure: data.departure.displayName,
-          arrival: data.arrival.displayName,
+          departure: data.departureLocation,
+          arrival: data.arrivalLocation,
           shippingDate: data.shippingDate,
           status: 'En attente de validation'
         },
@@ -1659,8 +1659,8 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
     
     // Libérer le verrou en cas d'erreur aussi
     const userEmail = req.body?.contact?.email;
-    if (userEmail && req.body?.departure && req.body?.arrival) {
-      const submissionFingerprint = `${userEmail}-${req.body.departure.displayName}-${req.body.arrival.displayName}-${req.body.shippingDate}-${req.body.container.type}-${req.body.container.availableVolume}`;
+    if (userEmail && req.body?.departureLocation && req.body?.arrivalLocation) {
+      const submissionFingerprint = `${userEmail}-${req.body.departureLocation}-${req.body.arrivalLocation}-${req.body.shippingDate}-${req.body.container.type}-${req.body.container.availableVolume}`;
       submissionInProgress.delete(submissionFingerprint);
       console.log('🔓 Verrou libéré après erreur pour:', submissionFingerprint);
     }
@@ -1813,7 +1813,7 @@ app.get('/api/partage/validate-announcement', async (req, res) => {
     const deleteToken = 'del_' + Date.now() + '_' + Math.random().toString(36).substr(2, 15);
     
     // Mettre à jour avec les tokens de gestion
-    await base(partageTableName).update(recordId, {
+    await base(partageTableName).update(record.id, {
       edit_token: editToken,
       delete_token: deleteToken
     });
@@ -2948,7 +2948,7 @@ app.get('/test-email-validation', async (req, res) => {
             </h2>
             
             <p style="color: #475569; font-size: 16px; margin: 0 0 20px 0;">
-              Votre annonce de groupage <strong>${testData.departure.displayName} → ${testData.arrival.displayName}</strong> 
+              Votre annonce de groupage <strong>${testData.departureLocation} → ${testData.arrivalLocation}</strong> 
               a bien été reçue !
             </p>
             
