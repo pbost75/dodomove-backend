@@ -3145,6 +3145,379 @@ app.post('/api/partage/add-missing-tokens', async (req, res) => {
   }
 });
 
+// Route pour créer une alerte email
+app.post('/api/partage/create-alert', async (req, res) => {
+  console.log('POST /api/partage/create-alert appelé');
+  console.log('Body reçu:', req.body);
+  
+  try {
+    const { type, departure, arrival, volume_min, email } = req.body;
+
+    // Validation des données requises
+    if (!type || !departure || !arrival || volume_min === undefined || !email) {
+      console.error('❌ Données manquantes:', { type, departure, arrival, volume_min, email });
+      return res.status(400).json({
+        success: false,
+        error: 'Données manquantes. Requis: type, departure, arrival, volume_min, email'
+      });
+    }
+
+    // Validation du type
+    if (type !== 'offer' && type !== 'request') {
+      console.error('❌ Type invalide:', type);
+      return res.status(400).json({
+        success: false,
+        error: 'Type invalide. Doit être "offer" ou "request"'
+      });
+    }
+
+    // Validation de l'email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      console.error('❌ Email invalide:', email);
+      return res.status(400).json({
+        success: false,
+        error: 'Format d\'email invalide'
+      });
+    }
+
+    // Validation du volume minimum
+    if (typeof volume_min !== 'number' || volume_min <= 0) {
+      console.error('❌ Volume minimum invalide:', volume_min);
+      return res.status(400).json({
+        success: false,
+        error: 'Volume minimum doit être un nombre positif'
+      });
+    }
+
+    // Générer un token unique pour la désabonnement
+    const unsubscribeToken = 'unsub_' + Date.now() + '_' + Math.random().toString(36).substr(2, 15);
+    
+    // Générer un ID d'alerte unique
+    const alertId = 'ALERT-' + Date.now() + '-' + Math.random().toString(36).substr(2, 8).toUpperCase();
+
+    const emailAlertTableId = process.env.AIRTABLE_EMAIL_ALERT_TABLE_ID || 'tblVuVneCZTot07sB';
+    
+    console.log('📝 Création de l\'alerte email dans Airtable...');
+    
+    // Créer l'enregistrement dans Airtable
+    const alertRecord = await base(emailAlertTableId).create([
+      {
+        fields: {
+          "email": email,
+          "type": type, // 'offer' ou 'request'
+          "departure": departure,
+          "arrival": arrival,
+          "volume_min": volume_min,
+          "status": 'active',
+          "created_at": new Date().toISOString(),
+          "unsubscribe_token": unsubscribeToken
+        }
+      }
+    ]);
+
+    console.log('✅ Alerte créée avec succès:', alertId);
+
+    // Optionnel : Envoyer un email de confirmation
+    try {
+      const typeLabel = type === 'offer' ? 'personnes qui proposent de la place' : 'personnes qui cherchent de la place';
+      const volumeLabel = volume_min === 1 ? 'peu importe' : `${volume_min}m³ minimum`;
+      
+      const { data: emailData, error: emailError } = await resend.emails.send({
+        from: 'DodoPartage <noreply@dodomove.fr>',
+        to: [email],
+        subject: '🔔 Alerte DodoPartage créée avec succès',
+        html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Alerte DodoPartage créée</title>
+        </head>
+        <body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; line-height: 1.6;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
+            
+            <!-- Header moderne avec les bonnes couleurs -->
+            <div style="background: linear-gradient(135deg, #243163 0%, #1e2951 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="color: white; font-family: 'Inter', sans-serif; font-size: 28px; margin: 0; font-weight: 700;">
+                🚢 DodoPartage
+              </h1>
+              <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
+                Groupage collaboratif DOM-TOM
+              </p>
+            </div>
+            
+            <!-- Contenu principal -->
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #1e293b; font-size: 24px; margin: 0 0 20px 0; font-weight: 600;">
+                🔔 Alerte créée avec succès !
+              </h2>
+              
+              <p style="color: #475569; font-size: 16px; margin: 0 0 20px 0;">
+                Vous serez maintenant notifié(e) dès qu'une nouvelle opportunité correspondra à vos critères.
+              </p>
+              
+              <!-- Bloc alerte avec le style cohérent -->
+              <div style="background-color: #f9fafb; border-radius: 8px; padding: 24px; margin: 30px 0; border-left: 4px solid #F47D6C;">
+                <h3 style="color: #374151; margin: 0 0 16px 0; font-size: 18px; font-weight: 600;">
+                  🎯 Votre alerte pour :
+                </h3>
+                <div style="space-y: 8px;">
+                  <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                    <span style="color: #F47D6C; margin-right: 10px; font-size: 14px;">📦</span>
+                    <span style="color: #4b5563; font-size: 14px;">Des <strong>${typeLabel}</strong></span>
+                  </div>
+                  <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                    <span style="color: #F47D6C; margin-right: 10px; font-size: 14px;">🗺️</span>
+                    <span style="color: #4b5563; font-size: 14px;">Depuis <strong>${departure}</strong> vers <strong>${arrival}</strong></span>
+                  </div>
+                  <div style="display: flex; align-items: center;">
+                    <span style="color: #F47D6C; margin-right: 10px; font-size: 14px;">📏</span>
+                    <span style="color: #4b5563; font-size: 14px;">Volume : <strong>${volumeLabel}</strong></span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Message info -->
+              <div style="border-left: 4px solid #10b981; background-color: #ecfdf5; padding: 20px; margin: 30px 0;">
+                <div style="display: flex; align-items: center;">
+                  <span style="font-size: 20px; margin-right: 12px;">📧</span>
+                  <div>
+                    <h4 style="color: #065f46; font-size: 16px; margin: 0 0 4px 0; font-weight: 600;">
+                      Notifications activées
+                    </h4>
+                    <p style="color: #047857; font-size: 14px; margin: 0; line-height: 1.4;">
+                      Vous recevrez un email dès qu'une annonce correspondra à vos critères
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Bouton désactivation avec le style cohérent -->
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="https://partage.dodomove.fr/desactiver-alerte/${unsubscribeToken}" 
+                   style="display: inline-block; background-color: #6b7280; color: white; padding: 12px 24px; 
+                          text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 14px;">
+                  Désactiver cette alerte
+                </a>
+              </div>
+              
+              <!-- Informations supplémentaires -->
+              <div style="text-align: center; margin: 24px 0;">
+                <p style="color: #6b7280; font-size: 13px; margin: 0;">
+                  💡 Vous pouvez désactiver cette alerte à tout moment
+                </p>
+              </div>
+
+            </div>
+            
+            <!-- Footer simple -->
+            <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+                © 2024 DodoPartage - Une initiative 
+                <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+              </p>
+              <p style="color: #9CA3AF; font-size: 11px; margin: 5px 0 0 0;">
+                Si vous n'êtes pas à l'origine de cette demande, ignorez cet email
+              </p>
+            </div>
+            
+          </div>
+        </body>
+        </html>
+        `,
+      });
+
+      if (emailError) {
+        console.error('⚠️ Erreur email de confirmation (alerte créée quand même):', emailError);
+      } else {
+        console.log('📧 Email de confirmation envoyé:', emailData.id);
+      }
+    } catch (emailErr) {
+      console.error('⚠️ Erreur lors de l\'envoi email de confirmation:', emailErr);
+      // On continue même si l'email échoue
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Alerte email créée avec succès !',
+      data: {
+        alertId: alertId,
+        recordId: alertRecord[0].id,
+        email: email,
+        type: type,
+        departure: departure,
+        arrival: arrival,
+        volume_min: volume_min,
+        status: 'active',
+        confirmationEmailSent: true,
+        unsubscribeToken: unsubscribeToken
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la création de l\'alerte:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur serveur lors de la création de l\'alerte',
+      details: error.message
+    });
+  }
+});
+
+// Route pour désactiver une alerte (avec collecte de raison)
+app.post('/api/partage/deactivate-alert', async (req, res) => {
+  console.log('POST /api/partage/deactivate-alert appelé');
+  console.log('Body reçu:', req.body);
+  
+  try {
+    const { token, reason } = req.body;
+
+    // Validation des données requises
+    if (!token) {
+      console.error('❌ Token manquant:', token);
+      return res.status(400).json({
+        success: false,
+        error: 'Token de désactivation manquant'
+      });
+    }
+
+    const emailAlertTableId = process.env.AIRTABLE_EMAIL_ALERT_TABLE_ID || 'tblVuVneCZTot07sB';
+    
+    console.log('🔍 Recherche de l\'alerte avec le token...');
+    
+    // Chercher l'alerte par token
+    const records = await base(emailAlertTableId).select({
+      filterByFormula: `{unsubscribe_token} = '${token}'`,
+      maxRecords: 1
+    }).firstPage();
+
+    if (records.length === 0) {
+      console.error('❌ Aucune alerte trouvée avec ce token:', token);
+      return res.status(404).json({
+        success: false,
+        error: 'Alerte non trouvée ou token invalide'
+      });
+    }
+
+    const alertRecord = records[0];
+    console.log('✅ Alerte trouvée:', alertRecord.fields.email);
+
+    // Mettre à jour le statut et la raison
+    await base(emailAlertTableId).update(alertRecord.id, {
+      status: 'inactive',
+      deactivation_reason: reason || 'Non spécifiée'
+    });
+
+    console.log('✅ Alerte désactivée avec succès');
+
+    // Optionnel : Envoyer un email de confirmation de désactivation
+    try {
+      const { data: emailData, error: emailError } = await resend.emails.send({
+        from: 'DodoPartage <noreply@dodomove.fr>',
+        to: [alertRecord.fields.email],
+        subject: '📭 Alerte DodoPartage désactivée',
+        html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Alerte DodoPartage désactivée</title>
+        </head>
+        <body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; line-height: 1.6;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
+            
+            <!-- Header moderne avec les bonnes couleurs -->
+            <div style="background: linear-gradient(135deg, #243163 0%, #1e2951 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="color: white; font-family: 'Inter', sans-serif; font-size: 28px; margin: 0; font-weight: 700;">
+                🚢 DodoPartage
+              </h1>
+              <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
+                Groupage collaboratif DOM-TOM
+              </p>
+            </div>
+            
+            <!-- Contenu principal -->
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #1e293b; font-size: 24px; margin: 0 0 20px 0; font-weight: 600;">
+                📭 Alerte désactivée
+              </h2>
+              
+              <p style="color: #475569; font-size: 16px; margin: 0 0 20px 0;">
+                Votre alerte pour <strong>${alertRecord.fields.departure} → ${alertRecord.fields.arrival}</strong> 
+                a été désactivée avec succès.
+              </p>
+              
+              <!-- Message confirmation -->
+              <div style="border-left: 4px solid #6b7280; background-color: #f9fafb; padding: 20px; margin: 30px 0;">
+                <div style="display: flex; align-items: center;">
+                  <span style="font-size: 20px; margin-right: 12px;">✅</span>
+                  <div>
+                    <h4 style="color: #374151; font-size: 16px; margin: 0 0 4px 0; font-weight: 600;">
+                      Confirmation
+                    </h4>
+                    <p style="color: #4b5563; font-size: 14px; margin: 0; line-height: 1.4;">
+                      Vous ne recevrez plus de notifications pour cette alerte
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="https://partage.dodomove.fr" 
+                   style="display: inline-block; background-color: #F47D6C; color: white; padding: 12px 24px; 
+                          text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 14px;">
+                  Retour à DodoPartage
+                </a>
+              </div>
+
+            </div>
+            
+            <!-- Footer simple -->
+            <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+                © 2024 DodoPartage - Une initiative 
+                <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+              </p>
+            </div>
+            
+          </div>
+        </body>
+        </html>
+        `,
+      });
+
+      if (emailError) {
+        console.error('⚠️ Erreur email confirmation désactivation:', emailError);
+      } else {
+        console.log('📧 Email de confirmation désactivation envoyé:', emailData.id);
+      }
+    } catch (emailErr) {
+      console.error('⚠️ Erreur lors de l\'envoi email confirmation:', emailErr);
+      // On continue même si l'email échoue
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Alerte désactivée avec succès',
+      data: {
+        email: alertRecord.fields.email,
+        reason: reason || 'Non spécifiée'
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la désactivation de l\'alerte:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur serveur lors de la désactivation de l\'alerte',
+      details: error.message
+    });
+  }
+});
+
 // Création du serveur HTTP
 const server = http.createServer(app);
 
@@ -3171,6 +3544,8 @@ server.listen(PORT, host, () => {
   console.log('- POST /api/partage/confirm-deletion (DodoPartage)');
   console.log('- POST /api/partage/contact-announcement (DodoPartage)');
   console.log('- POST /api/partage/add-missing-tokens (DodoPartage - Migration)');
+  console.log('- POST /api/partage/create-alert (DodoPartage - Alertes)');
+  console.log('- POST /api/partage/deactivate-alert (DodoPartage - Alertes)');
   console.log('- GET /test-email-validation (Test email)');
 });
 
