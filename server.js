@@ -3403,11 +3403,29 @@ app.post('/api/partage/delete-alert', async (req, res) => {
     const alertRecord = records[0];
     console.log('✅ Alerte trouvée:', alertRecord.fields.email);
 
-    // Mettre à jour le statut et la raison
-    await base(emailAlertTableId).update(alertRecord.id, {
+    // Définir les raisons standardisées
+    const standardReasons = ['found_solution', 'plans_changed', 'too_many_emails', 'not_relevant', 'other'];
+    const isStandardReason = standardReasons.includes(reason);
+
+    // Préparer les données de mise à jour
+    const updateData = {
       status: 'deleted',
-      deleted_reason: reason || 'Non spécifiée'
-    });
+      deleted_at: new Date().toISOString()
+    };
+
+    if (isStandardReason) {
+      // Raison standardisée
+      updateData.delete_reason = reason;
+      console.log('📊 Raison standardisée:', reason);
+    } else {
+      // Raison personnalisée (texte libre)
+      updateData.delete_reason = 'other';
+      updateData.delete_reason_other = reason || 'Non spécifiée';
+      console.log('✍️ Raison personnalisée:', reason);
+    }
+
+    // Mettre à jour l'enregistrement
+    await base(emailAlertTableId).update(alertRecord.id, updateData);
 
     console.log('✅ Alerte supprimée avec succès');
 
