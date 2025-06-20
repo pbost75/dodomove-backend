@@ -2005,8 +2005,15 @@ app.get('/api/partage/get-announcements', async (req, res) => {
     let filterFormula = '';
     const filters = [];
 
-    // Filtre par statut
-    if (status !== 'all') {
+    // Filtre par statut avec exclusion explicite des annonces supprimées
+    if (status === 'all') {
+      // Si status = 'all', on affiche toutes les annonces SAUF les supprimées
+      filters.push(`{status} != 'deleted'`);
+    } else if (status === 'deleted') {
+      // Cas particulier : afficher uniquement les annonces supprimées (pour admin/debug)
+      filters.push(`{status} = 'deleted'`);
+    } else {
+      // Statut spécifique (published, pending_validation, etc.)
       filters.push(`{status} = '${status}'`);
     }
 
