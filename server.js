@@ -3403,29 +3403,16 @@ app.post('/api/partage/delete-alert', async (req, res) => {
     const alertRecord = records[0];
     console.log('✅ Alerte trouvée:', alertRecord.fields.email);
 
-    // Définir les raisons standardisées
-    const standardReasons = ['found_solution', 'plans_changed', 'too_many_emails', 'not_relevant', 'other'];
-    const isStandardReason = standardReasons.includes(reason);
-
-    // Préparer les données de mise à jour
-    const updateData = {
+    // VERSION TEMPORAIRE : Retour à l'ancien système en attendant les colonnes Airtable
+    // TODO: Activer la nouvelle logique quand les colonnes delete_reason, delete_reason_other, deleted_at existent
+    
+    console.log('⚠️ Mode compatibilité: utilisation de l\'ancienne structure Airtable');
+    
+    // Mettre à jour avec l'ancienne structure
+    await base(emailAlertTableId).update(alertRecord.id, {
       status: 'deleted',
-      deleted_at: new Date().toISOString()
-    };
-
-    if (isStandardReason) {
-      // Raison standardisée
-      updateData.delete_reason = reason;
-      console.log('📊 Raison standardisée:', reason);
-    } else {
-      // Raison personnalisée (texte libre)
-      updateData.delete_reason = 'other';
-      updateData.delete_reason_other = reason || 'Non spécifiée';
-      console.log('✍️ Raison personnalisée:', reason);
-    }
-
-    // Mettre à jour l'enregistrement
-    await base(emailAlertTableId).update(alertRecord.id, updateData);
+      deleted_reason: reason || 'Non spécifiée'
+    });
 
     console.log('✅ Alerte supprimée avec succès');
 
