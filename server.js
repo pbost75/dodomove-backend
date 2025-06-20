@@ -3190,8 +3190,8 @@ app.post('/api/partage/create-alert', async (req, res) => {
       });
     }
 
-    // Générer un token unique pour la désabonnement
-    const unsubscribeToken = 'unsub_' + Date.now() + '_' + Math.random().toString(36).substr(2, 15);
+    // Générer un token unique pour la suppression
+    const deleteToken = 'del_' + Date.now() + '_' + Math.random().toString(36).substr(2, 15);
     
     // Générer un ID d'alerte unique
     const alertId = 'ALERT-' + Date.now() + '-' + Math.random().toString(36).substr(2, 8).toUpperCase();
@@ -3210,7 +3210,7 @@ app.post('/api/partage/create-alert', async (req, res) => {
           "arrival": arrival,
           "volume_min": volume_min,
           "status": 'active',
-          "unsubscribe_token": unsubscribeToken
+          "delete_token": deleteToken
         }
       }
     ]);
@@ -3293,19 +3293,19 @@ app.post('/api/partage/create-alert', async (req, res) => {
                 </div>
               </div>
               
-              <!-- Bouton désactivation avec le style cohérent -->
+              <!-- Bouton suppression avec le style cohérent -->
               <div style="text-align: center; margin: 32px 0;">
-                <a href="https://partage.dodomove.fr/desactiver-alerte/${unsubscribeToken}" 
+                <a href="https://partage.dodomove.fr/supprimer-alerte/${deleteToken}" 
                    style="display: inline-block; background-color: #6b7280; color: white; padding: 12px 24px; 
                           text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 14px;">
-                  Désactiver cette alerte
+                  Supprimer cette alerte
                 </a>
               </div>
               
               <!-- Informations supplémentaires -->
               <div style="text-align: center; margin: 24px 0;">
                 <p style="color: #6b7280; font-size: 13px; margin: 0;">
-                  💡 Vous pouvez désactiver cette alerte à tout moment
+                  💡 Vous pouvez supprimer cette alerte à tout moment
                 </p>
               </div>
 
@@ -3351,7 +3351,7 @@ app.post('/api/partage/create-alert', async (req, res) => {
         volume_min: volume_min,
         status: 'active',
         confirmationEmailSent: true,
-        unsubscribeToken: unsubscribeToken
+        deleteToken: deleteToken
       }
     });
 
@@ -3365,9 +3365,9 @@ app.post('/api/partage/create-alert', async (req, res) => {
   }
 });
 
-// Route pour désactiver une alerte (avec collecte de raison)
-app.post('/api/partage/deactivate-alert', async (req, res) => {
-  console.log('POST /api/partage/deactivate-alert appelé');
+// Route pour supprimer une alerte (avec collecte de raison)
+app.post('/api/partage/delete-alert', async (req, res) => {
+  console.log('POST /api/partage/delete-alert appelé');
   console.log('Body reçu:', req.body);
   
   try {
@@ -3378,7 +3378,7 @@ app.post('/api/partage/deactivate-alert', async (req, res) => {
       console.error('❌ Token manquant:', token);
       return res.status(400).json({
         success: false,
-        error: 'Token de désactivation manquant'
+        error: 'Token de suppression manquant'
       });
     }
 
@@ -3388,7 +3388,7 @@ app.post('/api/partage/deactivate-alert', async (req, res) => {
     
     // Chercher l'alerte par token
     const records = await base(emailAlertTableId).select({
-      filterByFormula: `{unsubscribe_token} = '${token}'`,
+      filterByFormula: `{delete_token} = '${token}'`,
       maxRecords: 1
     }).firstPage();
 
@@ -3405,25 +3405,25 @@ app.post('/api/partage/deactivate-alert', async (req, res) => {
 
     // Mettre à jour le statut et la raison
     await base(emailAlertTableId).update(alertRecord.id, {
-      status: 'inactive',
-      deactivation_reason: reason || 'Non spécifiée'
+      status: 'deleted',
+      deleted_reason: reason || 'Non spécifiée'
     });
 
-    console.log('✅ Alerte désactivée avec succès');
+    console.log('✅ Alerte supprimée avec succès');
 
-    // Optionnel : Envoyer un email de confirmation de désactivation
+    // Optionnel : Envoyer un email de confirmation de suppression
     try {
       const { data: emailData, error: emailError } = await resend.emails.send({
         from: 'DodoPartage <noreply@dodomove.fr>',
         to: [alertRecord.fields.email],
-        subject: '📭 Alerte DodoPartage désactivée',
+        subject: '🗑️ Alerte DodoPartage supprimée',
         html: `
         <!DOCTYPE html>
         <html>
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Alerte DodoPartage désactivée</title>
+          <title>Alerte DodoPartage supprimée</title>
         </head>
         <body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; line-height: 1.6;">
           <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
@@ -3441,12 +3441,12 @@ app.post('/api/partage/deactivate-alert', async (req, res) => {
             <!-- Contenu principal -->
             <div style="padding: 40px 30px;">
               <h2 style="color: #1e293b; font-size: 24px; margin: 0 0 20px 0; font-weight: 600;">
-                📭 Alerte désactivée
+                🗑️ Alerte supprimée
               </h2>
               
               <p style="color: #475569; font-size: 16px; margin: 0 0 20px 0;">
                 Votre alerte pour <strong>${alertRecord.fields.departure} → ${alertRecord.fields.arrival}</strong> 
-                a été désactivée avec succès.
+                a été supprimée avec succès.
               </p>
               
               <!-- Message confirmation -->
@@ -3489,9 +3489,9 @@ app.post('/api/partage/deactivate-alert', async (req, res) => {
       });
 
       if (emailError) {
-        console.error('⚠️ Erreur email confirmation désactivation:', emailError);
+        console.error('⚠️ Erreur email confirmation suppression:', emailError);
       } else {
-        console.log('📧 Email de confirmation désactivation envoyé:', emailData.id);
+        console.log('📧 Email de confirmation suppression envoyé:', emailData.id);
       }
     } catch (emailErr) {
       console.error('⚠️ Erreur lors de l\'envoi email confirmation:', emailErr);
@@ -3500,7 +3500,7 @@ app.post('/api/partage/deactivate-alert', async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Alerte désactivée avec succès',
+      message: 'Alerte supprimée avec succès',
       data: {
         email: alertRecord.fields.email,
         reason: reason || 'Non spécifiée'
@@ -3508,10 +3508,10 @@ app.post('/api/partage/deactivate-alert', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Erreur lors de la désactivation de l\'alerte:', error);
+    console.error('❌ Erreur lors de la suppression de l\'alerte:', error);
     res.status(500).json({
       success: false,
-      error: 'Erreur serveur lors de la désactivation de l\'alerte',
+      error: 'Erreur serveur lors de la suppression de l\'alerte',
       details: error.message
     });
   }
@@ -3544,7 +3544,7 @@ server.listen(PORT, host, () => {
   console.log('- POST /api/partage/contact-announcement (DodoPartage)');
   console.log('- POST /api/partage/add-missing-tokens (DodoPartage - Migration)');
   console.log('- POST /api/partage/create-alert (DodoPartage - Alertes)');
-  console.log('- POST /api/partage/deactivate-alert (DodoPartage - Alertes)');
+  console.log('- POST /api/partage/delete-alert (DodoPartage - Alertes)');
   console.log('- GET /test-email-validation (Test email)');
 });
 
