@@ -3210,7 +3210,6 @@ app.post('/api/partage/create-alert', async (req, res) => {
           "arrival": arrival,
           "volume_min": volume_min,
           "status": 'active',
-          "created_at": new Date().toISOString(),
           "unsubscribe_token": unsubscribeToken
         }
       }
