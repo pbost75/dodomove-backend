@@ -2536,7 +2536,7 @@ app.post('/api/partage/update-announcement', async (req, res) => {
       container_minimum_volume: parseFloat(data.container.minimumVolume || 0),
       offer_type: data.offerType,
       announcement_text: data.announcementText,
-      announcement_text_length: data.announcementText.length,
+      // announcement_text_length: data.announcementText.length, // COMMENTÉ: ce champ n'existe pas dans Airtable
       updated_at: new Date().toISOString()
     };
 
