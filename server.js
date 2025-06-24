@@ -724,7 +724,7 @@ app.post('/submit-funnel', async (req, res) => {
           
           // Informations de contact (déjà validées)
           "contact_first_name": contactInfo.firstName,
-          "contact_last_name": contactInfo.lastName,
+          "contact_last_name": contactInfo.lastName || '',
           "contact_email": contactInfo.email,
           "contact_phone": contactInfo.phone || '',
           "attached_note": contactInfo.comment || '',
@@ -2536,8 +2536,8 @@ app.post('/api/partage/update-announcement', async (req, res) => {
       container_minimum_volume: parseFloat(data.container.minimumVolume || 0),
       offer_type: data.offerType,
       announcement_text: data.announcementText,
-      // announcement_text_length: data.announcementText.length, // COMMENTÉ: ce champ n'existe pas dans Airtable
-      updated_at: new Date().toISOString()
+      // announcement_text_length: data.announcementText.length, // COMMENTÉ: ce champ n'existe pas dans Airtable  
+      // updated_at: new Date().toISOString() // COMMENTÉ: ce champ n'existe pas dans Airtable
     };
 
     // Mettre à jour l'enregistrement
