@@ -2518,10 +2518,10 @@ app.post('/api/partage/update-announcement', async (req, res) => {
     const recordId = records[0].id;
     const oldData = records[0].fields;
     
-    // Préparer les données mises à jour
+    // Préparer les données mises à jour (sans contact_last_name qui n'existe pas dans Airtable)
     const updatedFields = {
       contact_first_name: data.contact.firstName,
-      contact_last_name: data.contact.lastName || '',
+      // contact_last_name: data.contact.lastName || '', // COMMENTÉ: ce champ n'existe pas dans Airtable
       contact_email: data.contact.email,
       contact_phone: data.contact.phone || '',
       departure_country: data.departure.country,
