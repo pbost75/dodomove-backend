@@ -2537,7 +2537,7 @@ app.post('/api/partage/update-announcement', async (req, res) => {
       offer_type: data.offerType,
       announcement_text: data.announcementText,
       // announcement_text_length: data.announcementText.length, // COMMENTÉ: ce champ n'existe pas dans Airtable  
-      // updated_at: new Date().toISOString() // COMMENTÉ: ce champ n'existe pas dans Airtable
+      updated_at: new Date().toISOString() // ✅ RÉACTIVÉ: colonne créée dans Airtable
     };
 
     // Mettre à jour l'enregistrement
