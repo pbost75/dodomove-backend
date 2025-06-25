@@ -1870,6 +1870,7 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
         
         // Participation aux frais
         'accepts_fees': data.budget.acceptsFees || false,
+        'offer_type': data.budget.acceptsFees ? 'paid' : 'free',
         
         // Texte de la demande
         'announcement_text': data.announcementText || '',
@@ -2781,39 +2782,55 @@ app.get('/api/partage/edit-form/:token', async (req, res) => {
     const fields = announcement.fields;
     
     // Retourner toutes les données nécessaires pour le formulaire de modification
+    const baseData = {
+      id: announcement.id,
+      reference: fields.reference,
+      contact: {
+        firstName: fields.contact_first_name,
+        lastName: fields.contact_last_name,
+        email: fields.contact_email,
+        phone: fields.contact_phone
+      },
+      departure: {
+        country: fields.departure_country,
+        city: fields.departure_city,
+        postalCode: fields.departure_postal_code,
+        displayName: `${fields.departure_country} (${fields.departure_city})`
+      },
+      arrival: {
+        country: fields.arrival_country,
+        city: fields.arrival_city,
+        postalCode: fields.arrival_postal_code,
+        displayName: `${fields.arrival_country} (${fields.arrival_city})`
+      },
+      announcementText: fields.announcement_text,
+      requestType: fields.request_type
+    };
+
+    // Ajouter les données spécifiques selon le type d'annonce
+    if (fields.request_type === 'search') {
+      // Pour les demandes de place
+      baseData.shippingPeriod = fields.shipping_period_formatted || 'Flexible';
+      baseData.container = {
+        volumeNeeded: fields.volume_needed || 0
+      };
+      baseData.acceptsCostSharing = fields.accepts_fees || false;
+      // Générer offer_type basé sur accepts_fees pour cohérence
+      baseData.offerType = fields.accepts_fees ? 'paid' : 'free';
+    } else {
+      // Pour les offres de place (comportement existant)
+      baseData.shippingDate = fields.shipping_date;
+      baseData.container = {
+        type: fields.container_type,
+        availableVolume: fields.container_available_volume,
+        minimumVolume: fields.container_minimum_volume
+      };
+      baseData.offerType = fields.offer_type;
+    }
+
     res.status(200).json({
       success: true,
-      data: {
-        id: announcement.id,
-        reference: fields.reference,
-        contact: {
-          firstName: fields.contact_first_name,
-          lastName: fields.contact_last_name,
-          email: fields.contact_email,
-          phone: fields.contact_phone
-        },
-        departure: {
-          country: fields.departure_country,
-          city: fields.departure_city,
-          postalCode: fields.departure_postal_code,
-          displayName: `${fields.departure_country} (${fields.departure_city})`
-        },
-        arrival: {
-          country: fields.arrival_country,
-          city: fields.arrival_city,
-          postalCode: fields.arrival_postal_code,
-          displayName: `${fields.arrival_country} (${fields.arrival_city})`
-        },
-        shippingDate: fields.shipping_date,
-        container: {
-          type: fields.container_type,
-          availableVolume: fields.container_available_volume,
-          minimumVolume: fields.container_minimum_volume
-        },
-        offerType: fields.offer_type,
-        announcementText: fields.announcement_text,
-                requestType: fields.request_type // Ajouter le type de demande (search/offer)
-      }
+      data: baseData
     });
 
   } catch (error) {
