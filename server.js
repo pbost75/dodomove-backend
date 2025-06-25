@@ -1743,7 +1743,7 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
     }
 
     // Créer une empreinte unique pour les demandes de recherche
-    const submissionFingerprint = `SEARCH-${userEmail}-${data.departureLocation}-${data.arrivalLocation}-${data.volumeNeeded.neededVolume}-${data.budget.acceptsFees}`;
+    const submissionFingerprint = `PARTAGE-${userEmail}-${data.departureLocation}-${data.arrivalLocation}-${data.volumeNeeded.neededVolume}-${data.budget.acceptsFees}`;
     
     if (submissionInProgress.has(submissionFingerprint)) {
       console.log('⚠️ Demande de recherche IDENTIQUE déjà en cours:', submissionFingerprint);
@@ -1804,7 +1804,7 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
     const generateSearchReference = () => {
       const timestamp = Date.now().toString();
       const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
-      return `SEARCH-${timestamp.slice(-6)}-${randomSuffix}`;
+      return `PARTAGE-${timestamp.slice(-6)}-${randomSuffix}`;
     };
 
     const reference = generateSearchReference();
