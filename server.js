@@ -2811,7 +2811,8 @@ app.get('/api/partage/edit-form/:token', async (req, res) => {
           minimumVolume: fields.container_minimum_volume
         },
         offerType: fields.offer_type,
-        announcementText: fields.announcement_text
+        announcementText: fields.announcement_text,
+                requestType: fields.request_type // Ajouter le type de demande (search/offer)
       }
     });
 
