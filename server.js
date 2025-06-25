@@ -1445,7 +1445,10 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
         'offer_type': data.offerType,
         
         // Texte de l'annonce
-        'announcement_text': data.announcementText || ''
+        'announcement_text': data.announcementText || '',
+
+        // Type de requête
+        'request_type': data.request_type || 'offer'
       }
     };
     
@@ -1870,7 +1873,10 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
         'accepts_fees': data.budget.acceptsFees || false,
         
         // Texte de la demande
-        'announcement_text': data.announcementText || ''
+        'announcement_text': data.announcementText || '',
+
+        // Type de requête
+        'request_type': data.request_type || 'offer'
       }
     };
     
