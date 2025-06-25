@@ -1722,7 +1722,360 @@ app.get('/api/partage/test', async (req, res) => {
   }
 });
 
-// Route pour valider une annonce DodoPartage via email
+// Route pour soumettre une demande de recherche de place DodoPartage
+app.post('/api/partage/submit-search-request', async (req, res) => {
+  console.log('POST /api/partage/submit-search-request appelé');
+  console.log('Body reçu:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const data = req.body;
+
+    // Protection contre les soumissions simultanées IDENTIQUES
+    const userEmail = data.contact?.email;
+    if (!userEmail) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email requis'
+      });
+    }
+
+    // Créer une empreinte unique pour les demandes de recherche
+    const submissionFingerprint = `SEARCH-${userEmail}-${data.departureLocation}-${data.arrivalLocation}-${data.volumeNeeded.neededVolume}-${data.budget.acceptsFees}`;
+    
+    if (submissionInProgress.has(submissionFingerprint)) {
+      console.log('⚠️ Demande de recherche IDENTIQUE déjà en cours:', submissionFingerprint);
+      return res.status(429).json({
+        success: false,
+        error: 'Une demande identique est déjà en cours',
+        message: 'Veuillez patienter...'
+      });
+    }
+    
+    // Marquer cette demande comme en cours
+    submissionInProgress.set(submissionFingerprint, Date.now());
+    console.log('🔒 Demande de recherche verrouillée:', submissionFingerprint);
+
+    // Nettoyer automatiquement après 30 secondes
+    setTimeout(() => {
+      submissionInProgress.delete(submissionFingerprint);
+      console.log('🔓 Verrou libéré automatiquement pour:', submissionFingerprint);
+    }, 30000);
+
+    // Validation des données requises
+    if (!data.contact?.email || !data.contact?.firstName) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email et prénom sont requis'
+      });
+    }
+
+    if (!data.departure?.country || !data.arrival?.country) {
+      return res.status(400).json({
+        success: false,
+        error: 'Destinations de départ et d\'arrivée sont requises'
+      });
+    }
+
+    if (!data.volumeNeeded?.neededVolume || data.volumeNeeded.neededVolume <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Volume recherché doit être supérieur à 0'
+      });
+    }
+
+    if (data.budget.acceptsFees === null || data.budget.acceptsFees === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: 'Position sur la participation aux frais est requise'
+      });
+    }
+
+    if (!data.announcementText || data.announcementText.length < 10) {
+      return res.status(400).json({
+        success: false,
+        error: 'Description de la demande doit contenir au moins 10 caractères'
+      });
+    }
+
+    // Générer une référence unique pour la demande
+    const generateSearchReference = () => {
+      const timestamp = Date.now().toString();
+      const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
+      return `SEARCH-${timestamp.slice(-6)}-${randomSuffix}`;
+    };
+
+    const reference = generateSearchReference();
+    console.log('Référence de demande générée:', reference);
+
+    // Protection contre les doublons : vérifier si une demande similaire existe déjà
+    try {
+      const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+      const recentRecords = await base(partageTableName).select({
+        filterByFormula: `AND({contact_email} = '${data.contact.email}', {request_type} = 'search', DATETIME_DIFF(NOW(), {created_at}, 'minutes') < 2)`,
+        maxRecords: 1
+      }).firstPage();
+      
+      if (recentRecords.length > 0) {
+        console.log('⚠️ Doublon détecté - demande récente trouvée pour cet email (moins de 2 minutes)');
+        // Libérer le verrou avant de retourner l'erreur
+        submissionInProgress.delete(submissionFingerprint);
+        console.log('🔓 Verrou libéré après détection de doublon pour:', submissionFingerprint);
+        
+        return res.status(409).json({
+          success: false,
+          error: 'duplicate',
+          message: 'Une demande a déjà été créée récemment avec cet email',
+          details: 'Veuillez attendre 2 minutes avant de créer une nouvelle demande'
+        });
+      }
+    } catch (duplicateCheckError) {
+      console.log('⚠️ Impossible de vérifier les doublons, on continue:', duplicateCheckError.message);
+    }
+
+    // Préparer les données complètes pour Airtable
+    const airtableData = {
+      fields: {
+        // Identifiant et statut
+        'reference': reference,
+        'created_at': new Date().toISOString(),
+        'status': 'pending',
+        'validation_token': crypto.randomUUID(),
+        'expired_at': new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString(), // 7 jours
+        'request_type': 'search', // Différencier des annonces "propose"
+        
+        // Contact
+        'contact_first_name': data.contact.firstName,
+        'contact_email': data.contact.email,
+        'contact_phone': data.contact.phone || '',
+        
+        // Départ
+        'departure_country': data.departure.country,
+        'departure_city': data.departure.city,
+        'departure_postal_code': data.departure.postalCode || '',
+        
+        // Arrivée
+        'arrival_country': data.arrival.country,
+        'arrival_city': data.arrival.city,
+        'arrival_postal_code': data.arrival.postalCode || '',
+        
+        // Période d'expédition (pour les demandes)
+        'shipping_period_formatted': data.shippingMonthsFormatted || 'Flexible',
+        'shipping_urgency': data.shippingPeriod?.urgency || 'flexible',
+        
+        // Volume recherché (au lieu d'un conteneur)
+        'volume_needed': parseFloat(data.volumeNeeded.neededVolume) || 0,
+        'volume_used_calculator': data.volumeNeeded.usedCalculator || false,
+        
+        // Participation aux frais
+        'accepts_fees': data.budget.acceptsFees || false,
+        
+        // Texte de la demande
+        'announcement_text': data.announcementText || ''
+      }
+    };
+    
+    console.log('🔍 Données de demande envoyées à Airtable:', JSON.stringify(airtableData, null, 2));
+
+    // Enregistrer dans Airtable
+    let airtableRecordId = null;
+    let airtableSuccess = false;
+    try {
+      console.log('📤 Envoi demande vers Airtable...');
+      
+      // Utiliser la même table que les annonces mais avec request_type = 'search'
+      const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+      console.log('📋 Table Airtable utilisée:', partageTableName);
+      
+      const records = await base(partageTableName).create([airtableData]);
+      airtableRecordId = records[0].id;
+      airtableSuccess = true;
+      
+      console.log('✅ Demande enregistrée dans Airtable:', airtableRecordId);
+      console.log('✅ Token validation stocké:', airtableData.fields.validation_token);
+      
+    } catch (airtableError) {
+      console.error('❌ Erreur Airtable détaillée:', airtableError);
+      console.error('❌ Message d\'erreur:', airtableError.message);
+      
+      // En cas d'erreur Airtable, on continue quand même
+      console.log('⚠️ Continuons sans Airtable pour ne pas bloquer l\'utilisateur');
+    }
+
+    // Envoyer l'email de validation via Resend (seulement si Airtable a réussi)
+    if (airtableSuccess) {
+      try {
+        console.log('📧 Envoi de l\'email de validation pour demande...');
+        
+        // Utiliser le token de validation déjà stocké dans Airtable
+        const validationToken = airtableData.fields.validation_token;
+        const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://partage.dodomove.fr';
+        const validationUrl = `${frontendUrl}/api/validate-announcement?token=${validationToken}`;
+        
+        console.log('🔑 Token de validation utilisé:', validationToken);
+      
+      const { data: emailData, error: emailError } = await resend.emails.send({
+        from: 'DodoPartage <noreply@dodomove.fr>',
+        to: [data.contact.email],
+        subject: '🔍 Confirmez votre demande de place DodoPartage',
+        html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Confirmez votre demande DodoPartage</title>
+        </head>
+        <body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; line-height: 1.6;">
+          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
+            
+            <!-- Header moderne avec les bonnes couleurs -->
+            <div style="background: linear-gradient(135deg, #243163 0%, #1e2951 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="color: white; font-family: 'Inter', sans-serif; font-size: 28px; margin: 0; font-weight: 700;">
+                🔍 DodoPartage
+              </h1>
+              <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
+                Recherche de place pour groupage
+              </p>
+            </div>
+            
+            <!-- Contenu principal -->
+            <div style="padding: 40px 30px;">
+              <h2 style="color: #1e293b; font-size: 24px; margin: 0 0 20px 0; font-weight: 600;">
+                Bonjour ${data.contact.firstName} 👋
+              </h2>
+              
+              <p style="color: #475569; font-size: 16px; margin: 0 0 20px 0;">
+                Votre demande de place <strong>${data.departureLocation || `${data.departure.city}, ${data.departure.country}`} → ${data.arrivalLocation || `${data.arrival.city}, ${data.arrival.country}`}</strong>
+                a bien été reçue !
+              </p>
+              
+              <!-- Récap de la demande -->
+              <div style="background-color: #f1f5f9; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                <h4 style="color: #334155; margin: 0 0 12px 0; font-size: 16px; font-weight: 600;">
+                  📦 Votre demande :
+                </h4>
+                <p style="color: #64748b; font-size: 14px; margin: 5px 0;">
+                  <strong>Volume recherché :</strong> ${data.volumeNeeded.neededVolume} m³
+                </p>
+                <p style="color: #64748b; font-size: 14px; margin: 5px 0;">
+                  <strong>Participation aux frais :</strong> ${data.budget.acceptsFees ? 'Accepte de participer' : 'Ne souhaite pas participer'}
+                </p>
+                <p style="color: #64748b; font-size: 14px; margin: 5px 0;">
+                  <strong>Période :</strong> ${data.shippingMonthsFormatted || 'Flexible'}
+                </p>
+              </div>
+              
+              <!-- Message d'urgence minimaliste -->
+              <div style="border-left: 4px solid #f59e0b; background-color: #fffbeb; padding: 20px; margin: 30px 0;">
+                <div style="display: flex; align-items: center;">
+                  <span style="font-size: 20px; margin-right: 12px;">⚠️</span>
+                  <div>
+                    <h3 style="color: #92400e; font-size: 16px; margin: 0 0 4px 0; font-weight: 600;">
+                      Confirmation requise
+                    </h3>
+                    <p style="color: #b45309; font-size: 14px; margin: 0; line-height: 1.4;">
+                      Votre demande sera visible après validation de votre email
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Bouton CTA minimaliste -->
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="${validationUrl}" 
+                   style="display: inline-block; background-color: #F47D6C; color: white; padding: 14px 28px;
+                          text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 15px;">
+                  Confirmer mon email
+                </a>
+              </div>
+              
+              <!-- Explications simplifiées -->
+              <div style="background-color: #f9fafb; border-radius: 8px; padding: 24px; margin: 30px 0;">
+                <h4 style="color: #374151; margin: 0 0 16px 0; font-size: 16px; font-weight: 600;">
+                  Après confirmation :
+                </h4>
+                
+                <div style="space-y: 8px;">
+                  <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                    <span style="color: #10b981; margin-right: 10px; font-size: 14px;">✓</span>
+                    <span style="color: #4b5563; font-size: 14px;">Votre demande devient visible</span>
+                  </div>
+                  <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                    <span style="color: #10b981; margin-right: 10px; font-size: 14px;">✓</span>
+                    <span style="color: #4b5563; font-size: 14px;">Les transporteurs vous contactent</span>
+                  </div>
+                  <div style="display: flex; align-items: center;">
+                    <span style="color: #10b981; margin-right: 10px; font-size: 14px;">✓</span>
+                    <span style="color: #4b5563; font-size: 14px;">Vous organisez votre expédition</span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Informations expiration -->
+              <div style="text-align: center; margin: 24px 0;">
+                <p style="color: #6b7280; font-size: 13px; margin: 0;">
+                  ⏰ Lien valide 7 jours
+                </p>
+              </div>
+            </div>
+            
+            <!-- Footer simple -->
+            <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+                © 2024 DodoPartage - Une initiative 
+                <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+              </p>
+              <p style="color: #9CA3AF; font-size: 11px; margin: 5px 0 0 0;">
+                Si vous n'êtes pas à l'origine de cette demande, ignorez cet email
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+        `,
+      });
+
+      if (emailError) {
+        console.error('❌ Erreur Resend:', emailError);
+        throw new Error(`Erreur email: ${emailError.message}`);
+      }
+
+      console.log('✅ Email de validation envoyé:', emailData);
+
+      } catch (emailError) {
+        console.error('❌ Erreur lors de l\'envoi de l\'email:', emailError);
+        // Note: On ne bloque pas le processus, la demande est enregistrée
+      }
+    }
+
+    // Libérer le verrou après succès
+    submissionInProgress.delete(submissionFingerprint);
+    console.log('🔓 Verrou libéré après succès pour:', submissionFingerprint);
+
+    // Réponse de succès
+    console.log('✅ Demande de place soumise avec succès');
+    res.status(200).json({
+      success: true,
+      message: 'Demande de place soumise avec succès',
+      data: {
+        reference: reference,
+        email: data.contact.email,
+        status: 'pending_validation',
+        recordId: airtableRecordId
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la soumission de la demande:', error);
+    
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la soumission de la demande',
+      message: 'Une erreur technique s\'est produite. Veuillez réessayer.',
+      details: error.message
+    });
+  }
+}); // Route pour valider une annonce DodoPartage via email
 app.get('/api/partage/validate-announcement', async (req, res) => {
   console.log('GET /api/partage/validate-announcement appelé');
   
@@ -3539,7 +3892,7 @@ server.listen(PORT, host, () => {
   console.log('- POST /send-email');
   console.log('- POST /submit-funnel');
   console.log('- POST /api/partage/submit-announcement (DodoPartage)');
-  console.log('- GET /api/partage/test (DodoPartage)');
+  console.log('- POST /api/partage/submit-search-request (DodoPartage)');  console.log('- GET /api/partage/test (DodoPartage)');
   console.log('- GET /api/partage/get-announcements (DodoPartage)');
   console.log('- GET /api/partage/validate-announcement (DodoPartage)');
   console.log('- GET /api/partage/edit-form/:token (DodoPartage)');
