@@ -1863,7 +1863,6 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
         
         // Période d'expédition (pour les demandes)
         'shipping_period_formatted': data.shippingMonthsFormatted || 'Flexible',
-        'shipping_urgency': data.shippingPeriod?.urgency || 'flexible',
         
         // Volume recherché (au lieu d'un conteneur)
         'volume_needed': parseFloat(data.volumeNeeded.neededVolume) || 0,
