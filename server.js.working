@@ -1725,125 +1725,6 @@ app.get('/api/partage/test', async (req, res) => {
   }
 });
 
-
-// ========================================
-// FONCTION UTILITAIRE POUR LES PÉRIODES
-// ========================================
-
-/**
- * Convertit une liste de mois sélectionnés en dates de début et fin
- * Format attendu: ['Janvier 2025', 'Février 2025']
- */
-function convertSelectedMonthsToDates(selectedMonths) {
-  if (!selectedMonths || selectedMonths.length === 0) {
-    return {
-      startDate: null,
-      endDate: null,
-      formattedPeriod: 'Période flexible'
-    };
-  }
-
-  console.log('🗓️ Conversion des mois sélectionnés:', selectedMonths);
-
-  // Mapping des mois français
-  const MONTHS_MAP = {
-    'Janvier': 0, 'Février': 1, 'Mars': 2, 'Avril': 3, 'Mai': 4, 'Juin': 5,
-    'Juillet': 6, 'Août': 7, 'Septembre': 8, 'Octobre': 9, 'Novembre': 10, 'Décembre': 11
-  };
-
-  // Parser et trier les mois
-  const parsedMonths = selectedMonths
-    .map(monthStr => {
-      const [monthName, yearStr] = monthStr.split(' ');
-      const year = parseInt(yearStr);
-      const monthIndex = MONTHS_MAP[monthName];
-      
-      if (monthIndex === undefined || isNaN(year)) {
-        console.log('⚠️ Mois invalide ignoré:', monthStr);
-        return null;
-      }
-      
-      return {
-        year,
-        month: monthIndex,
-        monthName,
-        date: new Date(year, monthIndex, 1)
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.date.getTime() - b.date.getTime());
-
-  if (parsedMonths.length === 0) {
-    return {
-      startDate: null,
-      endDate: null,
-      formattedPeriod: 'Période flexible'
-    };
-  }
-
-  // Premier mois = début de période (1er du mois)
-  const firstMonth = parsedMonths[0];
-  const startDate = new Date(Date.UTC(firstMonth.year, firstMonth.month, 1));
-
-  // Dernier mois = fin de période (dernier jour du mois)
-  const lastMonth = parsedMonths[parsedMonths.length - 1];
-  const endDate = new Date(Date.UTC(lastMonth.year, lastMonth.month + 1, 0));
-
-  // Formatage pour l'affichage
-  let formattedPeriod = '';
-  if (parsedMonths.length === 1) {
-    formattedPeriod = `${firstMonth.monthName} ${firstMonth.year}`;
-  } else {
-    formattedPeriod = `${firstMonth.monthName} ${firstMonth.year} - ${lastMonth.monthName} ${lastMonth.year}`;
-  }
-
-  const result = {
-    startDate: startDate.toISOString().split('T')[0], // Format YYYY-MM-DD
-    endDate: endDate.toISOString().split('T')[0],
-    formattedPeriod
-  };
-
-  console.log('📅 Résultat de la conversion:', result);
-  return result;
-}
-
-/**
- * Convertit des dates de début/fin en liste de mois sélectionnés
- * @param startDate Date de début (format YYYY-MM-DD)
- * @param endDate Date de fin (format YYYY-MM-DD)
- * @returns Liste des mois sélectionnés
- */
-function convertDatesToSelectedMonths(startDate, endDate) {
-  if (!startDate || !endDate) {
-    return [];
-  }
-
-  console.log('🗓️ Conversion des dates vers mois:', { startDate, endDate });
-
-  const MONTHS_NAMES = [
-    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
-  ];
-
-  const start = new Date(startDate + 'T00:00:00Z'); // Force UTC
-  const end = new Date(endDate + 'T00:00:00Z'); // Force UTC
-  const selectedMonths = [];
-
-  let current = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
-  const endMonth = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1));
-
-  while (current <= endMonth) {
-    const monthName = MONTHS_NAMES[current.getUTCMonth()];
-    const year = current.getUTCFullYear();
-    selectedMonths.push(`${monthName} ${year}`);
-    
-    // Passer au mois suivant
-    current.setUTCMonth(current.getUTCMonth() + 1);
-  }
-
-  console.log('📅 Mois sélectionnés récupérés:', selectedMonths);
-  return selectedMonths;
-}
 // Route pour soumettre une demande de recherche de place DodoPartage
 app.post('/api/partage/submit-search-request', async (req, res) => {
   console.log('POST /api/partage/submit-search-request appelé');
@@ -1954,21 +1835,6 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
       console.log('⚠️ Impossible de vérifier les doublons, on continue:', duplicateCheckError.message);
     }
 
-
-    // ========================================
-    // TRAITEMENT DES PÉRIODES D'EXPÉDITION
-    // ========================================
-    
-    let periodDates = { startDate: null, endDate: null, formattedPeriod: 'Flexible' };
-    
-    // Traiter les données de période envoyées par le frontend
-    if (data.shippingPeriod && Array.isArray(data.shippingPeriod) && data.shippingPeriod.length > 0) {
-      console.log('📅 Période reçue du frontend:', data.shippingPeriod);
-      periodDates = convertSelectedMonthsToDates(data.shippingPeriod);
-      console.log('✅ Périodes converties:', periodDates);
-    } else {
-      console.log('⚠️ Aucune période spécifique reçue, utilisation de "Flexible"');
-    }
     // Préparer les données complètes pour Airtable
     const airtableData = {
       fields: {
@@ -1996,17 +1862,15 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
         'arrival_postal_code': data.arrival.postalCode || '',
         
         // Période d'expédition (pour les demandes)
-        'shipping_period_formatted': periodDates.formattedPeriod || data.shippingMonthsFormatted || 'Flexible',
+        'shipping_period_formatted': data.shippingMonthsFormatted || 'Flexible',
         
-        // Nouveaux champs de dates exploitables pour filtrage
-        'shipping_period_start': periodDates.startDate,
-        'shipping_period_end': periodDates.endDate,        
         // Volume recherché (au lieu d'un conteneur)
         'volume_needed': parseFloat(data.volumeNeeded.neededVolume) || 0,
         'volume_used_calculator': data.volumeNeeded.usedCalculator || false,
         
         // Participation aux frais
         'accepts_fees': data.budget.acceptsFees || false,
+        'offer_type': data.budget.acceptsFees ? 'paid' : 'free',
         
         // Texte de la demande
         'announcement_text': data.announcementText || '',
@@ -2512,14 +2376,10 @@ app.get('/api/partage/get-announcements', async (req, res) => {
       filters.push(`{status} = '${status}'`);
     }
 
-    // Filtre par type d'annonce (offer/request)
-    if (type !== 'all') {
-      if (type === 'offer') {
-        filters.push(`{request_type} = 'offer'`);
-      } else if (type === 'request') {
-        filters.push(`{request_type} = 'search'`);
-      }
-    }
+    // TODO: Ajouter d'autres filtres selon les besoins
+    // if (type !== 'all') {
+    //   filters.push(`{offer_type} = '${type}'`);
+    // }
     
     if (filters.length > 0) {
       filterFormula = `AND(${filters.join(', ')})`;
@@ -2545,11 +2405,7 @@ app.get('/api/partage/get-announcements', async (req, res) => {
     const announcements = records.map(record => {
       const fields = record.fields;
       
-      // Détecter le type d'annonce
-      const isSearchRequest = fields.request_type === 'search';
-      
-      // Champs communs à tous les types d'annonces
-      const baseAnnouncement = {
+      return {
         id: record.id,
         reference: fields.reference || '',
         status: fields.status || 'pending_validation',
@@ -2563,48 +2419,15 @@ app.get('/api/partage/get-announcements', async (req, res) => {
         arrival_country: fields.arrival_country || '',
         arrival_city: fields.arrival_city || '',
         arrival_postal_code: fields.arrival_postal_code || '',
+        shipping_date: fields.shipping_date || '',
+        shipping_date_formatted: fields.shipping_date_formatted || '',
+        container_type: fields.container_type || '20',
+        container_available_volume: fields.container_available_volume || 0,
+        container_minimum_volume: fields.container_minimum_volume || 0,
+        offer_type: fields.offer_type || 'free',
         announcement_text: fields.announcement_text || '',
-        announcement_text_length: fields.announcement_text_length || 0,
-        request_type: fields.request_type || 'offer' // Nouveau champ pour différencier
+        announcement_text_length: fields.announcement_text_length || 0
       };
-      
-      if (isSearchRequest) {
-        // Champs spécifiques aux demandes de place
-        return {
-          ...baseAnnouncement,
-          // Champs pour les demandes search
-          volume_needed: fields.volume_needed || 0,
-          accepts_cost_sharing: fields.accepts_cost_sharing || false,
-          shipping_period_start: fields.shipping_period_start || '',
-          shipping_period_end: fields.shipping_period_end || '',
-          shipping_period_formatted: fields.shipping_period_formatted || 'Période flexible',
-          // Champs offer mis à null pour cohérence
-          shipping_date: '',
-          shipping_date_formatted: '',
-          container_type: '',
-          container_available_volume: 0,
-          container_minimum_volume: 0,
-          offer_type: ''
-        };
-      } else {
-        // Champs spécifiques aux offres de place
-        return {
-          ...baseAnnouncement,
-          // Champs pour les offres offer
-          shipping_date: fields.shipping_date || '',
-          shipping_date_formatted: fields.shipping_date_formatted || '',
-          container_type: fields.container_type || '20',
-          container_available_volume: fields.container_available_volume || 0,
-          container_minimum_volume: fields.container_minimum_volume || 0,
-          offer_type: fields.offer_type || 'free',
-          // Champs search mis à valeur par défaut pour cohérence
-          volume_needed: 0,
-          accepts_cost_sharing: false,
-          shipping_period_start: '',
-          shipping_period_end: '',
-          shipping_period_formatted: ''
-        };
-      }
     });
 
     // Fonction pour normaliser les textes (supprime accents et caractères spéciaux)
@@ -2643,33 +2466,27 @@ app.get('/api/partage/get-announcements', async (req, res) => {
       });
     }
 
-    // Filtre par volume (prendre en compte les deux types d'annonces)
+    // Filtre par volume
     if (volumeMin) {
       const minVol = parseFloat(volumeMin);
-      filteredAnnouncements = filteredAnnouncements.filter(ann => {
-        const volume = ann.request_type === 'search' 
-          ? ann.volume_needed 
-          : ann.container_available_volume;
-        return volume >= minVol;
-      });
+      filteredAnnouncements = filteredAnnouncements.filter(ann => 
+        ann.container_available_volume >= minVol
+      );
     }
 
     if (volumeMax) {
       const maxVol = parseFloat(volumeMax);
-      filteredAnnouncements = filteredAnnouncements.filter(ann => {
-        const volume = ann.request_type === 'search' 
-          ? ann.volume_needed 
-          : ann.container_available_volume;
-        return volume <= maxVol;
-      });
+      filteredAnnouncements = filteredAnnouncements.filter(ann => 
+        ann.container_available_volume <= maxVol
+      );
     }
 
     // Statistiques pour le debug
     const stats = {
       total: filteredAnnouncements.length,
       byType: {
-        offers: filteredAnnouncements.filter(a => a.request_type === 'offer').length,
-        requests: filteredAnnouncements.filter(a => a.request_type === 'search').length
+        offers: filteredAnnouncements.filter(a => a.offer_type === 'free' || a.offer_type === 'paid').length,
+        requests: 0 // Pour l'instant, toutes les annonces sont des offres
       },
       byStatus: {
         published: filteredAnnouncements.filter(a => a.status === 'published').length,
@@ -2965,67 +2782,39 @@ app.get('/api/partage/edit-form/:token', async (req, res) => {
     const fields = announcement.fields;
     
     // Retourner toutes les données nécessaires pour le formulaire de modification
-    const baseData = {
-      id: announcement.id,
-      reference: fields.reference,
-      contact: {
-        firstName: fields.contact_first_name,
-        lastName: fields.contact_last_name,
-        email: fields.contact_email,
-        phone: fields.contact_phone
-      },
-      departure: {
-        country: fields.departure_country,
-        city: fields.departure_city,
-        postalCode: fields.departure_postal_code,
-        displayName: `${fields.departure_country} (${fields.departure_city})`
-      },
-      arrival: {
-        country: fields.arrival_country,
-        city: fields.arrival_city,
-        postalCode: fields.arrival_postal_code,
-        displayName: `${fields.arrival_country} (${fields.arrival_city})`
-      },
-      announcementText: fields.announcement_text,
-      requestType: fields.request_type // Type de demande (search/offer)
-    };
-
-    // Ajouter les données spécifiques selon le type d'annonce
-    if (fields.request_type === 'search') {
-      // Pour les demandes de place
-      baseData.volumeNeeded = {
-        neededVolume: fields.volume_needed || 0,
-        usedCalculator: fields.volume_used_calculator || false
-      };
-      baseData.budget = {
-        acceptsFees: fields.accepts_fees || false
-      };
-      
-      // Récupérer la période formatée et les dates si disponibles
-      if (fields.shipping_period_start && fields.shipping_period_end) {
-        baseData.shippingPeriod = convertDatesToSelectedMonths(
-          fields.shipping_period_start, 
-          fields.shipping_period_end
-        );
-      } else {
-        baseData.shippingPeriod = [];
-      }
-      baseData.shippingPeriodFormatted = fields.shipping_period_formatted || 'Flexible';
-      
-    } else {
-      // Pour les offres de place (comportement existant)
-      baseData.shippingDate = fields.shipping_date;
-      baseData.container = {
-        type: fields.container_type,
-        availableVolume: fields.container_available_volume,
-        minimumVolume: fields.container_minimum_volume
-      };
-      baseData.offerType = fields.offer_type;
-    }
-
     res.status(200).json({
       success: true,
-      data: baseData
+      data: {
+        id: announcement.id,
+        reference: fields.reference,
+        contact: {
+          firstName: fields.contact_first_name,
+          lastName: fields.contact_last_name,
+          email: fields.contact_email,
+          phone: fields.contact_phone
+        },
+        departure: {
+          country: fields.departure_country,
+          city: fields.departure_city,
+          postalCode: fields.departure_postal_code,
+          displayName: `${fields.departure_country} (${fields.departure_city})`
+        },
+        arrival: {
+          country: fields.arrival_country,
+          city: fields.arrival_city,
+          postalCode: fields.arrival_postal_code,
+          displayName: `${fields.arrival_country} (${fields.arrival_city})`
+        },
+        shippingDate: fields.shipping_date,
+        container: {
+          type: fields.container_type,
+          availableVolume: fields.container_available_volume,
+          minimumVolume: fields.container_minimum_volume
+        },
+        offerType: fields.offer_type,
+        announcementText: fields.announcement_text,
+                requestType: fields.request_type // Ajouter le type de demande (search/offer)
+      }
     });
 
   } catch (error) {
