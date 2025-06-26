@@ -1961,14 +1961,29 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
     
     let periodDates = { startDate: null, endDate: null, formattedPeriod: 'Flexible' };
     
-    // Traiter les données de période envoyées par le frontend
-    if (data.shippingPeriod && Array.isArray(data.shippingPeriod) && data.shippingPeriod.length > 0) {
-      console.log('📅 Période reçue du frontend:', data.shippingPeriod);
+    // 🔧 CORRECTION : Utiliser les données déjà converties par le frontend
+    if (data.shipping_period_start && data.shipping_period_end) {
+      console.log('📅 Dates de période reçues du frontend (déjà converties):', {
+        start: data.shipping_period_start,
+        end: data.shipping_period_end,
+        formatted: data.shipping_period_formatted
+      });
+      periodDates = {
+        startDate: data.shipping_period_start,
+        endDate: data.shipping_period_end,
+        formattedPeriod: data.shipping_period_formatted || 'Flexible'
+      };
+      console.log('✅ Périodes utilisées directement depuis le frontend');
+    } 
+    // Fallback : traiter les données de période envoyées par le frontend (ancien format)
+    else if (data.shippingPeriod && Array.isArray(data.shippingPeriod) && data.shippingPeriod.length > 0) {
+      console.log('📅 Période reçue du frontend (ancien format):', data.shippingPeriod);
       periodDates = convertSelectedMonthsToDates(data.shippingPeriod);
-      console.log('✅ Périodes converties:', periodDates);
+      console.log('✅ Périodes converties côté backend:', periodDates);
     } else {
       console.log('⚠️ Aucune période spécifique reçue, utilisation de "Flexible"');
     }
+    
     // Préparer les données complètes pour Airtable
     const airtableData = {
       fields: {
