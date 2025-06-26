@@ -1725,6 +1725,87 @@ app.get('/api/partage/test', async (req, res) => {
   }
 });
 
+
+// ========================================
+// FONCTION UTILITAIRE POUR LES PÉRIODES
+// ========================================
+
+/**
+ * Convertit une liste de mois sélectionnés en dates de début et fin
+ * Format attendu: ['Janvier 2025', 'Février 2025']
+ */
+function convertSelectedMonthsToDates(selectedMonths) {
+  if (!selectedMonths || selectedMonths.length === 0) {
+    return {
+      startDate: null,
+      endDate: null,
+      formattedPeriod: 'Période flexible'
+    };
+  }
+
+  console.log('🗓️ Conversion des mois sélectionnés:', selectedMonths);
+
+  // Mapping des mois français
+  const MONTHS_MAP = {
+    'Janvier': 0, 'Février': 1, 'Mars': 2, 'Avril': 3, 'Mai': 4, 'Juin': 5,
+    'Juillet': 6, 'Août': 7, 'Septembre': 8, 'Octobre': 9, 'Novembre': 10, 'Décembre': 11
+  };
+
+  // Parser et trier les mois
+  const parsedMonths = selectedMonths
+    .map(monthStr => {
+      const [monthName, yearStr] = monthStr.split(' ');
+      const year = parseInt(yearStr);
+      const monthIndex = MONTHS_MAP[monthName];
+      
+      if (monthIndex === undefined || isNaN(year)) {
+        console.log('⚠️ Mois invalide ignoré:', monthStr);
+        return null;
+      }
+      
+      return {
+        year,
+        month: monthIndex,
+        monthName,
+        date: new Date(year, monthIndex, 1)
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  if (parsedMonths.length === 0) {
+    return {
+      startDate: null,
+      endDate: null,
+      formattedPeriod: 'Période flexible'
+    };
+  }
+
+  // Premier mois = début de période (1er du mois)
+  const firstMonth = parsedMonths[0];
+  const startDate = new Date(Date.UTC(firstMonth.year, firstMonth.month, 1));
+
+  // Dernier mois = fin de période (dernier jour du mois)
+  const lastMonth = parsedMonths[parsedMonths.length - 1];
+  const endDate = new Date(Date.UTC(lastMonth.year, lastMonth.month + 1, 0));
+
+  // Formatage pour l'affichage
+  let formattedPeriod = '';
+  if (parsedMonths.length === 1) {
+    formattedPeriod = `${firstMonth.monthName} ${firstMonth.year}`;
+  } else {
+    formattedPeriod = `${firstMonth.monthName} ${firstMonth.year} - ${lastMonth.monthName} ${lastMonth.year}`;
+  }
+
+  const result = {
+    startDate: startDate.toISOString().split('T')[0], // Format YYYY-MM-DD
+    endDate: endDate.toISOString().split('T')[0],
+    formattedPeriod
+  };
+
+  console.log('📅 Résultat de la conversion:', result);
+  return result;
+}
 // Route pour soumettre une demande de recherche de place DodoPartage
 app.post('/api/partage/submit-search-request', async (req, res) => {
   console.log('POST /api/partage/submit-search-request appelé');
@@ -1835,6 +1916,21 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
       console.log('⚠️ Impossible de vérifier les doublons, on continue:', duplicateCheckError.message);
     }
 
+
+    // ========================================
+    // TRAITEMENT DES PÉRIODES D'EXPÉDITION
+    // ========================================
+    
+    let periodDates = { startDate: null, endDate: null, formattedPeriod: 'Flexible' };
+    
+    // Traiter les données de période envoyées par le frontend
+    if (data.shippingPeriod && Array.isArray(data.shippingPeriod) && data.shippingPeriod.length > 0) {
+      console.log('📅 Période reçue du frontend:', data.shippingPeriod);
+      periodDates = convertSelectedMonthsToDates(data.shippingPeriod);
+      console.log('✅ Périodes converties:', periodDates);
+    } else {
+      console.log('⚠️ Aucune période spécifique reçue, utilisation de "Flexible"');
+    }
     // Préparer les données complètes pour Airtable
     const airtableData = {
       fields: {
@@ -1862,15 +1958,17 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
         'arrival_postal_code': data.arrival.postalCode || '',
         
         // Période d'expédition (pour les demandes)
-        'shipping_period_formatted': data.shippingMonthsFormatted || 'Flexible',
+        'shipping_period_formatted': periodDates.formattedPeriod || data.shippingMonthsFormatted || 'Flexible',
         
+        // Nouveaux champs de dates exploitables pour filtrage
+        'shipping_period_start': periodDates.startDate,
+        'shipping_period_end': periodDates.endDate,        
         // Volume recherché (au lieu d'un conteneur)
         'volume_needed': parseFloat(data.volumeNeeded.neededVolume) || 0,
         'volume_used_calculator': data.volumeNeeded.usedCalculator || false,
         
         // Participation aux frais
         'accepts_fees': data.budget.acceptsFees || false,
-        'offer_type': data.budget.acceptsFees ? 'paid' : 'free',
         
         // Texte de la demande
         'announcement_text': data.announcementText || '',
@@ -2782,55 +2880,39 @@ app.get('/api/partage/edit-form/:token', async (req, res) => {
     const fields = announcement.fields;
     
     // Retourner toutes les données nécessaires pour le formulaire de modification
-    const baseData = {
-      id: announcement.id,
-      reference: fields.reference,
-      contact: {
-        firstName: fields.contact_first_name,
-        lastName: fields.contact_last_name,
-        email: fields.contact_email,
-        phone: fields.contact_phone
-      },
-      departure: {
-        country: fields.departure_country,
-        city: fields.departure_city,
-        postalCode: fields.departure_postal_code,
-        displayName: `${fields.departure_country} (${fields.departure_city})`
-      },
-      arrival: {
-        country: fields.arrival_country,
-        city: fields.arrival_city,
-        postalCode: fields.arrival_postal_code,
-        displayName: `${fields.arrival_country} (${fields.arrival_city})`
-      },
-      announcementText: fields.announcement_text,
-      requestType: fields.request_type
-    };
-
-    // Ajouter les données spécifiques selon le type d'annonce
-    if (fields.request_type === 'search') {
-      // Pour les demandes de place
-      baseData.shippingPeriod = fields.shipping_period_formatted || 'Flexible';
-      baseData.container = {
-        volumeNeeded: fields.volume_needed || 0
-      };
-      baseData.acceptsCostSharing = fields.accepts_fees || false;
-      // Générer offer_type basé sur accepts_fees pour cohérence
-      baseData.offerType = fields.accepts_fees ? 'paid' : 'free';
-    } else {
-      // Pour les offres de place (comportement existant)
-      baseData.shippingDate = fields.shipping_date;
-      baseData.container = {
-        type: fields.container_type,
-        availableVolume: fields.container_available_volume,
-        minimumVolume: fields.container_minimum_volume
-      };
-      baseData.offerType = fields.offer_type;
-    }
-
     res.status(200).json({
       success: true,
-      data: baseData
+      data: {
+        id: announcement.id,
+        reference: fields.reference,
+        contact: {
+          firstName: fields.contact_first_name,
+          lastName: fields.contact_last_name,
+          email: fields.contact_email,
+          phone: fields.contact_phone
+        },
+        departure: {
+          country: fields.departure_country,
+          city: fields.departure_city,
+          postalCode: fields.departure_postal_code,
+          displayName: `${fields.departure_country} (${fields.departure_city})`
+        },
+        arrival: {
+          country: fields.arrival_country,
+          city: fields.arrival_city,
+          postalCode: fields.arrival_postal_code,
+          displayName: `${fields.arrival_country} (${fields.arrival_city})`
+        },
+        shippingDate: fields.shipping_date,
+        container: {
+          type: fields.container_type,
+          availableVolume: fields.container_available_volume,
+          minimumVolume: fields.container_minimum_volume
+        },
+        offerType: fields.offer_type,
+        announcementText: fields.announcement_text,
+                requestType: fields.request_type // Ajouter le type de demande (search/offer)
+      }
     });
 
   } catch (error) {
