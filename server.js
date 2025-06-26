@@ -1806,6 +1806,44 @@ function convertSelectedMonthsToDates(selectedMonths) {
   console.log('📅 Résultat de la conversion:', result);
   return result;
 }
+
+/**
+ * Convertit des dates de début/fin en liste de mois sélectionnés
+ * @param startDate Date de début (format YYYY-MM-DD)
+ * @param endDate Date de fin (format YYYY-MM-DD)
+ * @returns Liste des mois sélectionnés
+ */
+function convertDatesToSelectedMonths(startDate, endDate) {
+  if (!startDate || !endDate) {
+    return [];
+  }
+
+  console.log('🗓️ Conversion des dates vers mois:', { startDate, endDate });
+
+  const MONTHS_NAMES = [
+    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+  ];
+
+  const start = new Date(startDate + 'T00:00:00Z'); // Force UTC
+  const end = new Date(endDate + 'T00:00:00Z'); // Force UTC
+  const selectedMonths = [];
+
+  let current = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+  const endMonth = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1));
+
+  while (current <= endMonth) {
+    const monthName = MONTHS_NAMES[current.getUTCMonth()];
+    const year = current.getUTCFullYear();
+    selectedMonths.push(`${monthName} ${year}`);
+    
+    // Passer au mois suivant
+    current.setUTCMonth(current.getUTCMonth() + 1);
+  }
+
+  console.log('📅 Mois sélectionnés récupérés:', selectedMonths);
+  return selectedMonths;
+}
 // Route pour soumettre une demande de recherche de place DodoPartage
 app.post('/api/partage/submit-search-request', async (req, res) => {
   console.log('POST /api/partage/submit-search-request appelé');
@@ -2880,39 +2918,67 @@ app.get('/api/partage/edit-form/:token', async (req, res) => {
     const fields = announcement.fields;
     
     // Retourner toutes les données nécessaires pour le formulaire de modification
+    const baseData = {
+      id: announcement.id,
+      reference: fields.reference,
+      contact: {
+        firstName: fields.contact_first_name,
+        lastName: fields.contact_last_name,
+        email: fields.contact_email,
+        phone: fields.contact_phone
+      },
+      departure: {
+        country: fields.departure_country,
+        city: fields.departure_city,
+        postalCode: fields.departure_postal_code,
+        displayName: `${fields.departure_country} (${fields.departure_city})`
+      },
+      arrival: {
+        country: fields.arrival_country,
+        city: fields.arrival_city,
+        postalCode: fields.arrival_postal_code,
+        displayName: `${fields.arrival_country} (${fields.arrival_city})`
+      },
+      announcementText: fields.announcement_text,
+      requestType: fields.request_type // Type de demande (search/offer)
+    };
+
+    // Ajouter les données spécifiques selon le type d'annonce
+    if (fields.request_type === 'search') {
+      // Pour les demandes de place
+      baseData.volumeNeeded = {
+        neededVolume: fields.volume_needed || 0,
+        usedCalculator: fields.volume_used_calculator || false
+      };
+      baseData.budget = {
+        acceptsFees: fields.accepts_fees || false
+      };
+      
+      // Récupérer la période formatée et les dates si disponibles
+      if (fields.shipping_period_start && fields.shipping_period_end) {
+        baseData.shippingPeriod = convertDatesToSelectedMonths(
+          fields.shipping_period_start, 
+          fields.shipping_period_end
+        );
+      } else {
+        baseData.shippingPeriod = [];
+      }
+      baseData.shippingPeriodFormatted = fields.shipping_period_formatted || 'Flexible';
+      
+    } else {
+      // Pour les offres de place (comportement existant)
+      baseData.shippingDate = fields.shipping_date;
+      baseData.container = {
+        type: fields.container_type,
+        availableVolume: fields.container_available_volume,
+        minimumVolume: fields.container_minimum_volume
+      };
+      baseData.offerType = fields.offer_type;
+    }
+
     res.status(200).json({
       success: true,
-      data: {
-        id: announcement.id,
-        reference: fields.reference,
-        contact: {
-          firstName: fields.contact_first_name,
-          lastName: fields.contact_last_name,
-          email: fields.contact_email,
-          phone: fields.contact_phone
-        },
-        departure: {
-          country: fields.departure_country,
-          city: fields.departure_city,
-          postalCode: fields.departure_postal_code,
-          displayName: `${fields.departure_country} (${fields.departure_city})`
-        },
-        arrival: {
-          country: fields.arrival_country,
-          city: fields.arrival_city,
-          postalCode: fields.arrival_postal_code,
-          displayName: `${fields.arrival_country} (${fields.arrival_city})`
-        },
-        shippingDate: fields.shipping_date,
-        container: {
-          type: fields.container_type,
-          availableVolume: fields.container_available_volume,
-          minimumVolume: fields.container_minimum_volume
-        },
-        offerType: fields.offer_type,
-        announcementText: fields.announcement_text,
-                requestType: fields.request_type // Ajouter le type de demande (search/offer)
-      }
+      data: baseData
     });
 
   } catch (error) {
