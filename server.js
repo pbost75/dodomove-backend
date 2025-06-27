@@ -2589,7 +2589,7 @@ app.get('/api/partage/get-announcements', async (req, res) => {
           ...baseAnnouncement,
           // Champs pour les demandes search
           volume_needed: fields.volume_needed || 0,
-          accepts_cost_sharing: fields.accepts_cost_sharing || false,
+          accepts_fees: fields.accepts_fees || false,
           shipping_period_start: fields.shipping_period_start || '',
           shipping_period_end: fields.shipping_period_end || '',
           shipping_period_formatted: fields.shipping_period_formatted || 'Période flexible',
@@ -2614,7 +2614,7 @@ app.get('/api/partage/get-announcements', async (req, res) => {
           offer_type: fields.offer_type || 'free',
           // Champs search mis à valeur par défaut pour cohérence
           volume_needed: 0,
-          accepts_cost_sharing: false,
+          accepts_fees: false,
           shipping_period_start: '',
           shipping_period_end: '',
           shipping_period_formatted: ''
@@ -3169,7 +3169,7 @@ app.post('/api/partage/update-announcement', async (req, res) => {
         ...baseUpdatedFields,
         request_type: 'search',
         volume_needed: parseFloat(data.volumeNeeded.neededVolume),
-        accepts_cost_sharing: data.acceptsFees,
+        accepts_fees: data.acceptsFees,
         // Traitement des périodes d'expédition
         shipping_period_start: data.shippingPeriod?.[0] || '',
         shipping_period_end: data.shippingPeriod?.[data.shippingPeriod.length - 1] || '',
