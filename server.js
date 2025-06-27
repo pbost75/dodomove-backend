@@ -3947,7 +3947,7 @@ app.post('/api/partage/create-alert', async (req, res) => {
               
               <!-- Bouton suppression avec le style cohérent -->
               <div style="text-align: center; margin: 32px 0;">
-                <a href="https://partage.dodomove.fr/supprimer-alerte/${deleteToken}" 
+                <a href="${process.env.PARTAGE_APP_URL || 'https://www.dodomove.fr/partage'}/supprimer-alerte/${deleteToken}" 
                    style="display: inline-block; background-color: #6b7280; color: white; padding: 12px 24px; 
                           text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 14px;">
                   Supprimer cette alerte
