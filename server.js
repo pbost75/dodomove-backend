@@ -3067,28 +3067,9 @@ app.post('/api/partage/update-announcement', async (req, res) => {
       });
     }
 
-    // Validation des données obligatoires
-    const requiredFields = [
-      'contact.firstName', 'contact.email', 
-      'departure.country', 'departure.city',
-      'arrival.country', 'arrival.city',
-      'shippingDate', 'container.type', 'container.availableVolume',
-      'offerType', 'announcementText'
-    ];
-
-    for (const field of requiredFields) {
-      const fieldValue = field.split('.').reduce((obj, key) => obj?.[key], data);
-      if (!fieldValue) {
-        return res.status(400).json({
-          success: false,
-          error: `Champ manquant: ${field}`
-        });
-      }
-    }
-
     const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
     
-    // Trouver l'annonce
+    // Trouver l'annonce pour détecter son type
     const records = await base(partageTableName).select({
       filterByFormula: `{edit_token} = '${editToken}'`,
       maxRecords: 1
@@ -3103,11 +3084,71 @@ app.post('/api/partage/update-announcement', async (req, res) => {
 
     const recordId = records[0].id;
     const oldData = records[0].fields;
+    const requestType = data.request_type || oldData.request_type || 'offer';
+
+    // Validation des champs communs
+    const commonRequiredFields = [
+      'contact.firstName', 'contact.email', 
+      'departure.country', 'departure.city',
+      'arrival.country', 'arrival.city',
+      'announcementText'
+    ];
+
+    for (const field of commonRequiredFields) {
+      const fieldValue = field.split('.').reduce((obj, key) => obj?.[key], data);
+      if (!fieldValue) {
+        return res.status(400).json({
+          success: false,
+          error: `Champ manquant: ${field}`
+        });
+      }
+    }
+
+    // Validation spécifique selon le type
+    if (requestType === 'search') {
+      // Pour les demandes de place
+      if (!data.volumeNeeded?.neededVolume || data.volumeNeeded.neededVolume <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Volume recherché doit être supérieur à 0'
+        });
+      }
+      
+      if (data.acceptsFees === null || data.acceptsFees === undefined) {
+        return res.status(400).json({
+          success: false,
+          error: 'Position sur la participation aux frais est requise'
+        });
+      }
+    } else {
+      // Pour les offres de place (type 'offer')
+      if (!data.container?.type || !data.container?.availableVolume) {
+        return res.status(400).json({
+          success: false,
+          error: 'Informations du conteneur sont requises'
+        });
+      }
+      
+      if (!data.shippingDate) {
+        return res.status(400).json({
+          success: false,
+          error: 'Date d\'expédition est requise'
+        });
+      }
+      
+      if (!data.offerType) {
+        return res.status(400).json({
+          success: false,
+          error: 'Type d\'offre est requis'
+        });
+      }
+    }
+
+
     
-    // Préparer les données mises à jour (sans contact_last_name qui n'existe pas dans Airtable)
-    const updatedFields = {
+    // Préparer les données communes
+    const baseUpdatedFields = {
       contact_first_name: data.contact.firstName,
-      // contact_last_name: data.contact.lastName || '', // COMMENTÉ: ce champ n'existe pas dans Airtable
       contact_email: data.contact.email,
       contact_phone: data.contact.phone || '',
       departure_country: data.departure.country,
@@ -3116,15 +3157,40 @@ app.post('/api/partage/update-announcement', async (req, res) => {
       arrival_country: data.arrival.country,
       arrival_city: data.arrival.city,
       arrival_postal_code: data.arrival.postalCode || '',
-      shipping_date: data.shippingDate,
-      container_type: data.container.type,
-      container_available_volume: parseFloat(data.container.availableVolume),
-      container_minimum_volume: parseFloat(data.container.minimumVolume || 0),
-      offer_type: data.offerType,
       announcement_text: data.announcementText,
-      // announcement_text_length: data.announcementText.length, // COMMENTÉ: ce champ n'existe pas dans Airtable  
-      updated_at: new Date().toISOString() // ✅ RÉACTIVÉ: colonne créée dans Airtable
+      updated_at: new Date().toISOString()
     };
+
+    // Ajouter les champs spécifiques selon le type
+    let updatedFields;
+    if (requestType === 'search') {
+      // Pour les demandes de place
+      updatedFields = {
+        ...baseUpdatedFields,
+        request_type: 'search',
+        volume_needed: parseFloat(data.volumeNeeded.neededVolume),
+        accepts_cost_sharing: data.acceptsFees,
+        // Traitement des périodes d'expédition
+        shipping_period_start: data.shippingPeriod?.[0] || '',
+        shipping_period_end: data.shippingPeriod?.[data.shippingPeriod.length - 1] || '',
+        shipping_period_formatted: data.shippingPeriod?.length > 0 
+          ? `${data.shippingPeriod[0]} - ${data.shippingPeriod[data.shippingPeriod.length - 1]}`
+          : 'Période flexible'
+        // NOTE: Les champs container et offer restent inchangés (ne sont pas mis à jour)
+      };
+    } else {
+      // Pour les offres de place
+      updatedFields = {
+        ...baseUpdatedFields,
+        request_type: 'offer',
+        shipping_date: data.shippingDate,
+        container_type: data.container.type,
+        container_available_volume: parseFloat(data.container.availableVolume),
+        container_minimum_volume: parseFloat(data.container.minimumVolume || 0),
+        offer_type: data.offerType
+        // NOTE: Les champs search restent inchangés (ne sont pas mis à jour)
+      };
+    }
 
     // Mettre à jour l'enregistrement
     const updatedRecord = await base(partageTableName).update(recordId, updatedFields);
