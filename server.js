@@ -2601,6 +2601,8 @@ app.get('/api/partage/get-announcements', async (req, res) => {
         reference: fields.reference || '',
         status: fields.status || 'pending_validation',
         created_at: fields.created_at || new Date().toISOString(),
+        expires_at: fields.expires_at || null,
+        expired_at: fields.expired_at || null,
         contact_first_name: fields.contact_first_name || '',
         contact_email: fields.contact_email || '',
         contact_phone: fields.contact_phone || '',
