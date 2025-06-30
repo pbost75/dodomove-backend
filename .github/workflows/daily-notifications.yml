@@ -211,14 +211,14 @@ jobs:
               echo "📧 Envoi des notifications post-expiration..."
               
               # Extraire les données et envoyer les notifications
-              echo "$body" | jq -r '.data[] | "\(.id)|\(.expired_at)|\(.expiration_reason // "unknown")"' | while IFS='|' read -r announcement_id expired_at expiration_reason; do
+              echo "$body" | jq -r '.data[] | "\(.id)|\(.expired_at)"' | while IFS='|' read -r announcement_id expired_at; do
                 echo "📮 Notification pour annonce: $announcement_id"
                 
-                curl_response=$(curl -s -w "%{http_code}" \
-                  -X POST \
-                  -H "Content-Type: application/json" \
-                  -d "{\"announcementId\":\"$announcement_id\",\"expiredAt\":\"$expired_at\",\"expirationReason\":\"$expiration_reason\"}" \
-                  "${{ env.BACKEND_URL }}/api/partage/send-post-expiration-notification")
+                                  curl_response=$(curl -s -w "%{http_code}" \
+                    -X POST \
+                    -H "Content-Type: application/json" \
+                    -d "{\"announcementId\":\"$announcement_id\",\"expiredAt\":\"$expired_at\"}" \
+                    "${{ env.BACKEND_URL }}/api/partage/send-post-expiration-notification")
                 
                 email_http_code=$(echo "$curl_response" | tail -c 4)
                 

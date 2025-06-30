@@ -4720,7 +4720,7 @@ app.get('/api/partage/get-recently-expired', async (req, res) => {
       )`,
       fields: [
         'id', 'reference', 'contact_first_name', 'contact_email', 'request_type',
-        'departure_country', 'arrival_country', 'expired_at', 'expiration_reason'
+        'departure_country', 'arrival_country', 'expired_at'
       ]
     }).all();
 
@@ -4735,8 +4735,7 @@ app.get('/api/partage/get-recently-expired', async (req, res) => {
       request_type: record.fields.request_type,
       departure_country: record.fields.departure_country,
       arrival_country: record.fields.arrival_country,
-      expired_at: record.fields.expired_at,
-      expiration_reason: record.fields.expiration_reason
+      expired_at: record.fields.expired_at
     }));
 
     res.status(200).json({
@@ -4762,7 +4761,7 @@ app.post('/api/partage/send-post-expiration-notification', async (req, res) => {
   console.log('POST /api/partage/send-post-expiration-notification appelé');
   
   try {
-    const { announcementId, expiredAt, expirationReason } = req.body;
+    const { announcementId, expiredAt } = req.body;
     
     if (!announcementId) {
       return res.status(400).json({
@@ -4804,18 +4803,10 @@ app.post('/api/partage/send-post-expiration-notification', async (req, res) => {
       day: 'numeric'
     });
 
-    // Déterminer le message selon la raison d'expiration
-    let reasonMessage = '';
-    switch (expirationReason || announcement.expiration_reason) {
-      case 'date_depart_passee':
-        reasonMessage = 'La date de départ de votre conteneur est passée.';
-        break;
-      case 'delai_recherche_expire':
-        reasonMessage = 'Le délai de recherche de 60 jours s\'est écoulé.';
-        break;
-      default:
-        reasonMessage = 'La durée de validité s\'est écoulée.';
-    }
+    // Message d'expiration générique (plus de logique complexe de raison)
+    const reasonMessage = announcement.request_type === 'offer' 
+      ? 'La date de départ de votre conteneur est passée.'
+      : 'La durée de validité de votre recherche s\'est écoulée.';
 
     // URLs pour créer une nouvelle annonce
     const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://partage.dodomove.fr';
