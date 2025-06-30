@@ -1373,6 +1373,19 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
       });
     }
 
+    // Fonction helper pour générer des UTM cohérents pour les emails DodoPartage
+    const generateUTMUrl = (baseUrl, emailType, content = 'link') => {
+      const utm = new URLSearchParams({
+        utm_source: 'transactionnel',
+        utm_medium: 'email',
+        utm_campaign: `dodopartage-${emailType}`,
+        utm_content: content
+      });
+      
+      const separator = baseUrl.includes('?') ? '&' : '?';
+      return `${baseUrl}${separator}${utm.toString()}`;
+    };
+
     // Générer une référence unique pour l'annonce
     const generateAnnouncementReference = () => {
       const timestamp = Date.now().toString();
@@ -1605,7 +1618,7 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
             <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
               <p style="color: #94a3b8; font-size: 12px; margin: 0;">
                 © 2024 DodoPartage - Une initiative 
-                <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+                <a href="${generateUTMUrl('https://dodomove.fr', 'confirmation-offer', 'footer')}" style="color: #243163; text-decoration: none;">Dodomove</a>
               </p>
               <p style="color: #9CA3AF; font-size: 11px; margin: 5px 0 0 0;">
                 Si vous n'êtes pas à l'origine de cette demande, ignorez cet email
@@ -2212,7 +2225,7 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
             <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
               <p style="color: #94a3b8; font-size: 12px; margin: 0;">
                 © 2024 DodoPartage - Une initiative 
-                <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+                <a href="${generateUTMUrl('https://dodomove.fr', 'confirmation-search', 'footer')}" style="color: #243163; text-decoration: none;">Dodomove</a>
               </p>
               <p style="color: #9CA3AF; font-size: 11px; margin: 5px 0 0 0;">
                 Si vous n'êtes pas à l'origine de cette demande, ignorez cet email
@@ -2462,7 +2475,7 @@ app.get('/api/partage/validate-announcement', async (req, res) => {
             <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
               <p style="color: #94a3b8; font-size: 12px; margin: 0;">
                 © 2024 DodoPartage - Une initiative 
-                <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+                <a href="${generateUTMUrl('https://dodomove.fr', 'published', 'footer')}" style="color: #243163; text-decoration: none;">Dodomove</a>
               </p>
             </div>
             
@@ -2945,7 +2958,7 @@ app.post('/api/partage/confirm-deletion', async (req, res) => {
             <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
               <p style="color: #94a3b8; font-size: 12px; margin: 0;">
                 © 2024 DodoPartage - Une initiative 
-                <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+                <a href="${generateUTMUrl('https://dodomove.fr', 'deleted', 'footer')}" style="color: #243163; text-decoration: none;">Dodomove</a>
               </p>
             </div>
             
@@ -3335,7 +3348,7 @@ app.post('/api/partage/update-announcement', async (req, res) => {
             <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
               <p style="color: #94a3b8; font-size: 12px; margin: 0;">
                 © 2024 DodoPartage - Une initiative 
-                <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+                <a href="${generateUTMUrl('https://dodomove.fr', 'modified', 'footer')}" style="color: #243163; text-decoration: none;">Dodomove</a>
               </p>
             </div>
             
@@ -3553,7 +3566,7 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
             <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
               <p style="color: #94a3b8; font-size: 12px; margin: 0;">
                 © 2024 DodoPartage - Une initiative 
-                <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+                <a href="${generateUTMUrl('https://dodomove.fr', 'contact', 'footer')}" style="color: #243163; text-decoration: none;">Dodomove</a>
               </p>
             </div>
             
@@ -3729,7 +3742,7 @@ app.get('/test-email-validation', async (req, res) => {
           <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
             <p style="color: #94a3b8; font-size: 12px; margin: 0;">
               © 2024 DodoPartage - Une initiative 
-              <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+              <a href="${generateUTMUrl('https://dodomove.fr', 'test-email', 'footer')}" style="color: #243163; text-decoration: none;">Dodomove</a>
             </p>
             <p style="color: #9CA3AF; font-size: 11px; margin: 5px 0 0 0;">
               Si vous n'êtes pas à l'origine de cette demande, ignorez cet email
@@ -4025,7 +4038,7 @@ app.post('/api/partage/create-alert', async (req, res) => {
             <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
               <p style="color: #94a3b8; font-size: 12px; margin: 0;">
                 © 2024 DodoPartage - Une initiative 
-                <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+                <a href="${generateUTMUrl('https://dodomove.fr', 'alert-created', 'footer')}" style="color: #243163; text-decoration: none;">Dodomove</a>
               </p>
               <p style="color: #9CA3AF; font-size: 11px; margin: 5px 0 0 0;">
                 Si vous n'êtes pas à l'origine de cette demande, ignorez cet email
@@ -4180,7 +4193,7 @@ app.post('/api/partage/delete-alert', async (req, res) => {
               </div>
               
               <div style="text-align: center; margin: 32px 0;">
-                <a href="${process.env.PARTAGE_APP_URL || 'https://www.dodomove.fr/partage'}" 
+                <a href="${generateUTMUrl(process.env.PARTAGE_APP_URL || 'https://www.dodomove.fr/partage', 'alert-deleted', 'return_button')}" 
                    style="display: inline-block; background-color: #F47D6C; color: white; padding: 12px 24px; 
                           text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 14px;">
                   Retour à DodoPartage
@@ -4193,7 +4206,7 @@ app.post('/api/partage/delete-alert', async (req, res) => {
             <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
               <p style="color: #94a3b8; font-size: 12px; margin: 0;">
                 © 2024 DodoPartage - Une initiative 
-                <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+                <a href="${generateUTMUrl('https://dodomove.fr', 'alert-deleted', 'footer')}" style="color: #243163; text-decoration: none;">Dodomove</a>
               </p>
             </div>
             
@@ -4646,7 +4659,7 @@ app.post('/api/partage/send-expiration-reminder', async (req, res) => {
           <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
             <p style="color: #94a3b8; font-size: 12px; margin: 0;">
               © 2024 DodoPartage - Une initiative 
-              <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+              <a href="${generateUTMUrl('https://dodomove.fr', 'expiration-reminder', 'footer')}" style="color: #243163; text-decoration: none;">Dodomove</a>
             </p>
           </div>
           
@@ -4891,7 +4904,7 @@ app.post('/api/partage/send-post-expiration-notification', async (req, res) => {
               <p style="color: #475569; font-size: 16px; margin: 0 0 24px 0;">
                 Publiez une nouvelle annonce en quelques minutes
               </p>
-              <a href="${createNewUrl}" 
+              <a href="${generateUTMUrl(createNewUrl, 'post-expiration', 'create_new_button')}" 
                  style="display: inline-block; background-color: #F47D6C; color: white; padding: 16px 32px; 
                         text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
                 ✨ Créer une nouvelle annonce
@@ -4911,7 +4924,7 @@ app.post('/api/partage/send-post-expiration-notification', async (req, res) => {
           <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
             <p style="color: #94a3b8; font-size: 12px; margin: 0;">
               © 2024 DodoPartage - Une initiative 
-              <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+              <a href="${generateUTMUrl('https://dodomove.fr', 'post-expiration', 'footer')}" style="color: #243163; text-decoration: none;">Dodomove</a>
             </p>
           </div>
           
