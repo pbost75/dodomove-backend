@@ -4331,6 +4331,60 @@ app.post('/api/cron/expire-announcements', async (req, res) => {
   }
 });
 
+// Route pour mettre à jour expires_at (migration)
+app.post('/api/partage/update-expires-at', async (req, res) => {
+  console.log('POST /api/partage/update-expires-at appelé');
+  
+  try {
+    const { recordId, expiresAt, reason } = req.body;
+    
+    if (!recordId || !expiresAt) {
+      return res.status(400).json({
+        success: false,
+        error: 'Paramètres manquants: recordId et expiresAt requis'
+      });
+    }
+
+    // Vérifier les variables d'environnement
+    if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
+      return res.status(500).json({
+        success: false,
+        error: 'Configuration Airtable manquante'
+      });
+    }
+
+    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    
+    console.log(`🔄 Mise à jour expires_at pour ${recordId}: ${expiresAt}`);
+    console.log(`📝 Raison: ${reason}`);
+
+    // Mettre à jour l'enregistrement
+    await base(partageTableName).update(recordId, {
+      expires_at: expiresAt
+    });
+
+    console.log(`✅ Mise à jour réussie pour ${recordId}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'expires_at mis à jour avec succès',
+      data: {
+        recordId,
+        expiresAt,
+        reason
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la mise à jour expires_at:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la mise à jour',
+      details: error.message
+    });
+  }
+});
+
 // Création du serveur HTTP
 const server = http.createServer(app);
 
@@ -4360,6 +4414,7 @@ server.listen(PORT, host, () => {
   console.log('- POST /api/partage/create-alert (DodoPartage - Alertes)');
   console.log('- POST /api/partage/delete-alert (DodoPartage - Alertes)');
   console.log('- POST /api/cron/expire-announcements (DodoPartage - Expiration)');
+  console.log('- POST /api/partage/update-expires-at (DodoPartage - Migration)');
   console.log('- GET /test-email-validation (Test email)');
 });
 
