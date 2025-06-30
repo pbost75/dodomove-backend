@@ -2003,11 +2003,27 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
         'status': 'pending',
         'validation_token': crypto.randomUUID(),
         'expires_at': (() => {
-          // Pour les demandes : expiration après 60 jours de création  
-          const createdDate = new Date();
-          const expirationDate = new Date(createdDate);
-          expirationDate.setDate(expirationDate.getDate() + 60); // 60 jours après création
-          return expirationDate.toISOString();
+          // Pour les demandes : expiration le lendemain du 1er jour du mois suivant shipping_period_end
+          if (periodDates.endDate) {
+            const endDate = new Date(periodDates.endDate);
+            // Aller au 1er jour du mois suivant
+            const nextMonth = new Date(endDate.getFullYear(), endDate.getMonth() + 1, 1);
+            // Le lendemain du 1er jour du mois suivant
+            const dayAfter = new Date(nextMonth);
+            dayAfter.setDate(dayAfter.getDate() + 1);
+            
+            console.log(`📅 Calcul expiration SEARCH:`);
+            console.log(`   Fin période recherche: ${endDate.toISOString()}`);
+            console.log(`   1er jour mois suivant: ${nextMonth.toISOString()}`);
+            console.log(`   Expiration calculée: ${dayAfter.toISOString()}`);
+            
+            return dayAfter.toISOString();
+          }
+          // Fallback si pas de shipping_period_end : 60 jours
+          console.log(`⚠️ SEARCH sans shipping_period_end, utilisation fallback 60j`);
+          const fallbackDate = new Date();
+          fallbackDate.setDate(fallbackDate.getDate() + 60);
+          return fallbackDate.toISOString();
         })(),
         'request_type': 'search', // Différencier des annonces "propose"
         
