@@ -1416,7 +1416,17 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
         'created_at': new Date().toISOString(),
         'status': 'pending',
         'validation_token': crypto.randomUUID(),
-        'expires_at': new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString(), // 7 jours
+        'expires_at': (() => {
+          // Pour les offres : expiration le lendemain de shipping_date
+          if (data.shippingDate) {
+            const shippingDate = new Date(data.shippingDate);
+            const dayAfterShipping = new Date(shippingDate);
+            dayAfterShipping.setDate(dayAfterShipping.getDate() + 1);
+            return dayAfterShipping.toISOString();
+          }
+          // Fallback si pas de shipping_date : 7 jours
+          return new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString();
+        })(),
         
         // Contact
         'contact_first_name': data.contact.firstName,
@@ -1992,7 +2002,13 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
         'created_at': new Date().toISOString(),
         'status': 'pending',
         'validation_token': crypto.randomUUID(),
-        'expires_at': new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString(), // 7 jours
+        'expires_at': (() => {
+          // Pour les demandes : expiration après 60 jours de création  
+          const createdDate = new Date();
+          const expirationDate = new Date(createdDate);
+          expirationDate.setDate(expirationDate.getDate() + 60); // 60 jours après création
+          return expirationDate.toISOString();
+        })(),
         'request_type': 'search', // Différencier des annonces "propose"
         
         // Contact
