@@ -1,10 +1,10 @@
 name: Expiration automatique des annonces
 
 on:
-  # DÉSACTIVÉ TEMPORAIREMENT - BUG DÉTECTÉ
-  # schedule:
-  #   - cron: '0 6 * * *'
-  # Possibilité de déclencher manuellement seulement
+  # Exécution quotidienne à 6h UTC (8h France)
+  schedule:
+    - cron: '0 6 * * *'
+  # Possibilité de déclencher manuellement
   workflow_dispatch:
 
 jobs:
