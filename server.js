@@ -4808,11 +4808,8 @@ app.post('/api/partage/send-post-expiration-notification', async (req, res) => {
       ? 'La date de départ de votre conteneur est passée.'
       : 'La durée de validité de votre recherche s\'est écoulée.';
 
-    // URLs pour créer une nouvelle annonce
-    const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://partage.dodomove.fr';
-    const createNewUrl = announcement.request_type === 'offer' 
-      ? `${frontendUrl}/funnel/propose` 
-      : `${frontendUrl}/funnel/search`;
+    // URLs pour créer une nouvelle annonce - redirige vers dodomove.fr/partage avec popup ouverte
+    const createNewUrl = 'https://dodomove.fr/partage/?modal=open';
 
     // Envoyer l'email de notification
     const { data: emailData, error: emailError } = await resend.emails.send({
