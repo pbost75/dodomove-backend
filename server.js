@@ -3226,6 +3226,30 @@ app.post('/api/partage/update-announcement', async (req, res) => {
       };
     }
 
+    // ✅ CORRECTION CRITIQUE: Recalculer expires_at quand les dates changent
+    console.log('🔄 Recalcul de expires_at suite à modification...');
+    
+    if (requestType === 'search' && updatedFields.shipping_period_end) {
+      // SEARCHES: lendemain du 1er jour du mois suivant shipping_period_end
+      const endDate = new Date(updatedFields.shipping_period_end);
+      const nextMonth = new Date(endDate.getFullYear(), endDate.getMonth() + 1, 1);
+      const dayAfter = new Date(nextMonth);
+      dayAfter.setDate(dayAfter.getDate() + 1);
+      updatedFields.expires_at = dayAfter.toISOString();
+      
+      console.log(`📅 Nouveau expires_at SEARCH: ${updatedFields.expires_at} (période: ${updatedFields.shipping_period_end})`);
+    } else if (requestType === 'offer' && updatedFields.shipping_date) {
+      // OFFERS: lendemain de shipping_date
+      const shippingDate = new Date(updatedFields.shipping_date);
+      const dayAfterShipping = new Date(shippingDate);
+      dayAfterShipping.setDate(dayAfterShipping.getDate() + 1);
+      updatedFields.expires_at = dayAfterShipping.toISOString();
+      
+      console.log(`📅 Nouveau expires_at OFFER: ${updatedFields.expires_at} (départ: ${updatedFields.shipping_date})`);
+    } else {
+      console.log('⚠️ Pas de recalcul expires_at nécessaire (dates inchangées)');
+    }
+
     // Mettre à jour l'enregistrement
     const updatedRecord = await base(partageTableName).update(recordId, updatedFields);
 
@@ -4387,6 +4411,561 @@ app.post('/api/partage/update-expires-at', async (req, res) => {
   }
 });
 
+// ===================================
+// 📧 ROUTES NOTIFICATIONS D'EXPIRATION  
+// ===================================
+
+// Route pour récupérer les annonces expirant bientôt (J-3)
+app.get('/api/partage/get-expiring-soon', async (req, res) => {
+  console.log('GET /api/partage/get-expiring-soon appelé');
+  
+  try {
+    const { reminderDate } = req.query;
+    
+    if (!reminderDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'Paramètre reminderDate requis (format YYYY-MM-DD)'
+      });
+    }
+
+    // Vérifier les variables d'environnement
+    if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
+      return res.status(500).json({
+        success: false,
+        error: 'Configuration Airtable manquante'
+      });
+    }
+
+    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    
+    console.log(`📅 Recherche d'annonces expirant le: ${reminderDate}`);
+
+    // Construire les dates pour le filtre (début et fin de journée)
+    const startDate = `${reminderDate}T00:00:00.000Z`;
+    const endDate = `${reminderDate}T23:59:59.999Z`;
+
+    // Récupérer les annonces qui expirent à cette date
+    const expiringRecords = await base(partageTableName).select({
+      filterByFormula: `AND(
+        {status} = 'published',
+        {expires_at} != '',
+        {expires_at} >= '${startDate}',
+        {expires_at} <= '${endDate}'
+      )`,
+      fields: [
+        'id', 'reference', 'contact_first_name', 'contact_email', 'request_type',
+        'departure_country', 'arrival_country', 'expires_at', 'edit_token', 'delete_token'
+      ]
+    }).all();
+
+    console.log(`✅ ${expiringRecords.length} annonce(s) expirant le ${reminderDate}`);
+
+    // Formater les données pour les scripts
+    const announcements = expiringRecords.map(record => ({
+      id: record.id,
+      reference: record.fields.reference,
+      contact_first_name: record.fields.contact_first_name,
+      contact_email: record.fields.contact_email,
+      request_type: record.fields.request_type,
+      departure_country: record.fields.departure_country,
+      arrival_country: record.fields.arrival_country,
+      expires_at: record.fields.expires_at,
+      edit_token: record.fields.edit_token,
+      delete_token: record.fields.delete_token
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: `${announcements.length} annonce(s) expirant le ${reminderDate}`,
+      data: announcements,
+      reminderDate,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération des annonces expirant bientôt:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la récupération',
+      details: error.message
+    });
+  }
+});
+
+// Route pour envoyer un email de rappel avant expiration
+app.post('/api/partage/send-expiration-reminder', async (req, res) => {
+  console.log('POST /api/partage/send-expiration-reminder appelé');
+  
+  try {
+    const { announcementId, reminderType } = req.body;
+    
+    if (!announcementId || !reminderType) {
+      return res.status(400).json({
+        success: false,
+        error: 'Paramètres manquants: announcementId et reminderType requis'
+      });
+    }
+
+    // Vérifier les variables d'environnement
+    if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
+      return res.status(500).json({
+        success: false,
+        error: 'Configuration Airtable manquante'
+      });
+    }
+
+    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    
+    console.log(`📧 Envoi rappel ${reminderType} pour annonce: ${announcementId}`);
+
+    // Récupérer les détails de l'annonce
+    const record = await base(partageTableName).find(announcementId);
+    
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        error: 'Annonce introuvable'
+      });
+    }
+
+    const announcement = record.fields;
+    
+    // Formater la date d'expiration
+    const expiresAt = new Date(announcement.expires_at);
+    const formattedDate = expiresAt.toLocaleDateString('fr-FR', {
+      weekday: 'long',
+      year: 'numeric', 
+      month: 'long',
+      day: 'numeric'
+    });
+
+    // Calculer les jours restants
+    const now = new Date();
+    const daysRemaining = Math.ceil((expiresAt - now) / (1000 * 60 * 60 * 24));
+
+    // URLs d'action
+    const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://partage.dodomove.fr';
+    const editUrl = `${frontendUrl}/modifier/${announcement.edit_token}`;
+    const deleteUrl = `${frontendUrl}/supprimer/${announcement.delete_token}`;
+
+    // Envoyer l'email de rappel
+    const { data: emailData, error: emailError } = await resend.emails.send({
+      from: 'DodoPartage <noreply@dodomove.fr>',
+      to: [announcement.contact_email],
+      subject: `⚠️ Votre annonce DodoPartage expire dans ${daysRemaining} jour${daysRemaining > 1 ? 's' : ''}`,
+      html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Rappel d'expiration - DodoPartage</title>
+      </head>
+      <body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; line-height: 1.6;">
+        <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
+          
+          <!-- Header -->
+          <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 40px 30px; text-align: center;">
+            <h1 style="color: white; font-family: 'Inter', sans-serif; font-size: 28px; margin: 0; font-weight: 700;">
+              ⚠️ DodoPartage
+            </h1>
+            <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
+              Rappel d'expiration
+            </p>
+          </div>
+          
+          <!-- Contenu principal -->
+          <div style="padding: 40px 30px;">
+            <h2 style="color: #1e293b; font-size: 24px; margin: 0 0 20px 0; font-weight: 600;">
+              Bonjour ${announcement.contact_first_name} 👋
+            </h2>
+            
+            <p style="color: #475569; font-size: 16px; margin: 0 0 20px 0;">
+              Votre annonce DodoPartage <strong>${announcement.reference}</strong> expire dans <strong>${daysRemaining} jour${daysRemaining > 1 ? 's' : ''}</strong>.
+            </p>
+            
+            <!-- Détails de l'annonce -->
+            <div style="background-color: #f1f5f9; border-radius: 12px; padding: 24px; margin: 30px 0;">
+              <h3 style="color: #334155; font-size: 18px; margin: 0 0 16px 0; font-weight: 600;">
+                📦 Votre annonce
+              </h3>
+              <div style="color: #64748b; font-size: 14px; line-height: 1.6;">
+                <div style="margin-bottom: 8px;">
+                  <strong>Type:</strong> ${announcement.request_type === 'offer' ? 'Propose de la place' : 'Cherche une place'}
+                </div>
+                <div style="margin-bottom: 8px;">
+                  <strong>Trajet:</strong> ${announcement.departure_country} → ${announcement.arrival_country}
+                </div>
+                <div>
+                  <strong>Expire le:</strong> ${formattedDate}
+                </div>
+              </div>
+            </div>
+            
+            <!-- Alerte -->
+            <div style="border-left: 4px solid #f59e0b; background-color: #fffbeb; padding: 20px; margin: 30px 0;">
+              <div style="display: flex; align-items: center;">
+                <span style="font-size: 20px; margin-right: 12px;">⚠️</span>
+                <div>
+                  <h3 style="color: #92400e; font-size: 16px; margin: 0 0 4px 0; font-weight: 600;">
+                    Action requise
+                  </h3>
+                  <p style="color: #a16207; font-size: 14px; margin: 0; line-height: 1.4;">
+                    Votre annonce sera automatiquement supprimée après expiration
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Boutons d'action -->
+            <div style="text-align: center; margin: 32px 0;">
+              <a href="${editUrl}" 
+                 style="display: inline-block; background-color: #3b82f6; color: white; padding: 16px 32px; 
+                        text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 0 8px 12px 8px;">
+                ✏️ Modifier l'annonce
+              </a>
+              <br>
+              <a href="${deleteUrl}" 
+                 style="display: inline-block; background-color: #ef4444; color: white; padding: 14px 28px; 
+                        text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 14px; margin: 0 8px;">
+                🗑️ Supprimer maintenant
+              </a>
+            </div>
+            
+            <!-- Informations utiles -->
+            <div style="text-align: center; margin: 24px 0;">
+              <p style="color: #6b7280; font-size: 13px; margin: 0;">
+                💡 Vous pouvez modifier les dates pour prolonger votre annonce
+              </p>
+            </div>
+            
+          </div>
+          
+          <!-- Footer -->
+          <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+            <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+              © 2024 DodoPartage - Une initiative 
+              <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+            </p>
+          </div>
+          
+        </div>
+      </body>
+      </html>
+      `
+    });
+
+    if (emailError) {
+      console.error('❌ Erreur envoi email rappel:', emailError);
+      return res.status(500).json({
+        success: false,
+        error: 'Erreur lors de l\'envoi de l\'email',
+        details: emailError.message
+      });
+    }
+
+    console.log(`✅ Email de rappel envoyé avec succès à ${announcement.contact_email}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Email de rappel envoyé avec succès',
+      data: {
+        announcementId,
+        reference: announcement.reference,
+        contactEmail: announcement.contact_email,
+        daysRemaining,
+        emailId: emailData.id
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de l\'envoi du rappel:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de l\'envoi du rappel',
+      details: error.message
+    });
+  }
+});
+
+// Route pour récupérer les annonces récemment expirées (dernières 24h)
+app.get('/api/partage/get-recently-expired', async (req, res) => {
+  console.log('GET /api/partage/get-recently-expired appelé');
+  
+  try {
+    // Vérifier les variables d'environnement
+    if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
+      return res.status(500).json({
+        success: false,
+        error: 'Configuration Airtable manquante'
+      });
+    }
+
+    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    
+    // Calculer la date d'il y a 24 heures
+    const twentyFourHoursAgo = new Date();
+    twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+    const cutoffDate = twentyFourHoursAgo.toISOString();
+
+    console.log(`📅 Recherche d'annonces expirées depuis: ${cutoffDate}`);
+
+    // Récupérer les annonces expirées dans les dernières 24h
+    const expiredRecords = await base(partageTableName).select({
+      filterByFormula: `AND(
+        {status} = 'expired',
+        {expired_at} != '',
+        {expired_at} >= '${cutoffDate}'
+      )`,
+      fields: [
+        'id', 'reference', 'contact_first_name', 'contact_email', 'request_type',
+        'departure_country', 'arrival_country', 'expired_at', 'expiration_reason'
+      ]
+    }).all();
+
+    console.log(`✅ ${expiredRecords.length} annonce(s) récemment expirée(s)`);
+
+    // Formater les données pour les scripts
+    const announcements = expiredRecords.map(record => ({
+      id: record.id,
+      reference: record.fields.reference,
+      contact_first_name: record.fields.contact_first_name,
+      contact_email: record.fields.contact_email,
+      request_type: record.fields.request_type,
+      departure_country: record.fields.departure_country,
+      arrival_country: record.fields.arrival_country,
+      expired_at: record.fields.expired_at,
+      expiration_reason: record.fields.expiration_reason
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: `${announcements.length} annonce(s) récemment expirée(s)`,
+      data: announcements,
+      cutoffDate,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération des annonces récemment expirées:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la récupération',
+      details: error.message
+    });
+  }
+});
+
+// Route pour envoyer un email de notification post-expiration
+app.post('/api/partage/send-post-expiration-notification', async (req, res) => {
+  console.log('POST /api/partage/send-post-expiration-notification appelé');
+  
+  try {
+    const { announcementId, expiredAt, expirationReason } = req.body;
+    
+    if (!announcementId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Paramètre announcementId requis'
+      });
+    }
+
+    // Vérifier les variables d'environnement
+    if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
+      return res.status(500).json({
+        success: false,
+        error: 'Configuration Airtable manquante'
+      });
+    }
+
+    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    
+    console.log(`📧 Envoi notification post-expiration pour: ${announcementId}`);
+
+    // Récupérer les détails de l'annonce
+    const record = await base(partageTableName).find(announcementId);
+    
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        error: 'Annonce introuvable'
+      });
+    }
+
+    const announcement = record.fields;
+    
+    // Formater la date d'expiration
+    const expiredDate = new Date(expiredAt || announcement.expired_at);
+    const formattedDate = expiredDate.toLocaleDateString('fr-FR', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long', 
+      day: 'numeric'
+    });
+
+    // Déterminer le message selon la raison d'expiration
+    let reasonMessage = '';
+    switch (expirationReason || announcement.expiration_reason) {
+      case 'date_depart_passee':
+        reasonMessage = 'La date de départ de votre conteneur est passée.';
+        break;
+      case 'delai_recherche_expire':
+        reasonMessage = 'Le délai de recherche de 60 jours s\'est écoulé.';
+        break;
+      default:
+        reasonMessage = 'La durée de validité s\'est écoulée.';
+    }
+
+    // URLs pour créer une nouvelle annonce
+    const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://partage.dodomove.fr';
+    const createNewUrl = announcement.request_type === 'offer' 
+      ? `${frontendUrl}/funnel/propose` 
+      : `${frontendUrl}/funnel/search`;
+
+    // Envoyer l'email de notification
+    const { data: emailData, error: emailError } = await resend.emails.send({
+      from: 'DodoPartage <noreply@dodomove.fr>',
+      to: [announcement.contact_email],
+      subject: '📅 Votre annonce DodoPartage a expiré',
+      html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Annonce expirée - DodoPartage</title>
+      </head>
+      <body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; line-height: 1.6;">
+        <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
+          
+          <!-- Header -->
+          <div style="background: linear-gradient(135deg, #64748b 0%, #475569 100%); padding: 40px 30px; text-align: center;">
+            <h1 style="color: white; font-family: 'Inter', sans-serif; font-size: 28px; margin: 0; font-weight: 700;">
+              📅 DodoPartage
+            </h1>
+            <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
+              Notification d'expiration
+            </p>
+          </div>
+          
+          <!-- Contenu principal -->
+          <div style="padding: 40px 30px;">
+            <h2 style="color: #1e293b; font-size: 24px; margin: 0 0 20px 0; font-weight: 600;">
+              Bonjour ${announcement.contact_first_name} 👋
+            </h2>
+            
+            <p style="color: #475569; font-size: 16px; margin: 0 0 20px 0;">
+              Votre annonce DodoPartage <strong>${announcement.reference}</strong> a expiré le ${formattedDate}.
+            </p>
+            
+            <!-- Détails de l'annonce expirée -->
+            <div style="background-color: #f1f5f9; border-radius: 12px; padding: 24px; margin: 30px 0;">
+              <h3 style="color: #334155; font-size: 18px; margin: 0 0 16px 0; font-weight: 600;">
+                📦 Annonce expirée
+              </h3>
+              <div style="color: #64748b; font-size: 14px; line-height: 1.6;">
+                <div style="margin-bottom: 8px;">
+                  <strong>Type:</strong> ${announcement.request_type === 'offer' ? 'Propose de la place' : 'Cherche une place'}
+                </div>
+                <div style="margin-bottom: 8px;">
+                  <strong>Trajet:</strong> ${announcement.departure_country} → ${announcement.arrival_country}
+                </div>
+                <div style="margin-bottom: 8px;">
+                  <strong>Expirée le:</strong> ${formattedDate}
+                </div>
+                <div>
+                  <strong>Raison:</strong> ${reasonMessage}
+                </div>
+              </div>
+            </div>
+            
+            <!-- Information -->
+            <div style="border-left: 4px solid #6b7280; background-color: #f8fafc; padding: 20px; margin: 30px 0;">
+              <div style="display: flex; align-items: center;">
+                <span style="font-size: 20px; margin-right: 12px;">ℹ️</span>
+                <div>
+                  <h3 style="color: #374151; font-size: 16px; margin: 0 0 4px 0; font-weight: 600;">
+                    Votre annonce n'est plus visible
+                  </h3>
+                  <p style="color: #6b7280; font-size: 14px; margin: 0; line-height: 1.4;">
+                    Elle a été automatiquement retirée de la plateforme pour maintenir la fraîcheur des offres
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Encouragement nouvelle annonce -->
+            <div style="text-align: center; margin: 32px 0;">
+              <h3 style="color: #1e293b; font-size: 20px; margin: 0 0 16px 0; font-weight: 600;">
+                🚀 Nouveau projet de groupage ?
+              </h3>
+              <p style="color: #475569; font-size: 16px; margin: 0 0 24px 0;">
+                Publiez une nouvelle annonce en quelques minutes
+              </p>
+              <a href="${createNewUrl}" 
+                 style="display: inline-block; background-color: #F47D6C; color: white; padding: 16px 32px; 
+                        text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                ✨ Créer une nouvelle annonce
+              </a>
+            </div>
+            
+            <!-- Merci -->
+            <div style="text-align: center; margin: 24px 0;">
+              <p style="color: #6b7280; font-size: 14px; margin: 0;">
+                Merci d'avoir utilisé DodoPartage pour votre groupage ! 🙏
+              </p>
+            </div>
+            
+          </div>
+          
+          <!-- Footer -->
+          <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+            <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+              © 2024 DodoPartage - Une initiative 
+              <a href="https://dodomove.fr" style="color: #243163; text-decoration: none;">Dodomove</a>
+            </p>
+          </div>
+          
+        </div>
+      </body>
+      </html>
+      `
+    });
+
+    if (emailError) {
+      console.error('❌ Erreur envoi email post-expiration:', emailError);
+      return res.status(500).json({
+        success: false,
+        error: 'Erreur lors de l\'envoi de l\'email',
+        details: emailError.message
+      });
+    }
+
+    console.log(`✅ Email post-expiration envoyé avec succès à ${announcement.contact_email}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Email post-expiration envoyé avec succès',
+      data: {
+        announcementId,
+        reference: announcement.reference,
+        contactEmail: announcement.contact_email,
+        expiredAt: expiredDate.toISOString(),
+        emailId: emailData.id
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de l\'envoi de la notification post-expiration:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de l\'envoi de la notification',
+      details: error.message
+    });
+  }
+});
+
 // Création du serveur HTTP
 const server = http.createServer(app);
 
@@ -4417,6 +4996,10 @@ server.listen(PORT, host, () => {
   console.log('- POST /api/partage/delete-alert (DodoPartage - Alertes)');
   console.log('- POST /api/cron/expire-announcements (DodoPartage - Expiration)');
   console.log('- POST /api/partage/update-expires-at (DodoPartage - Migration)');
+  console.log('- GET /api/partage/get-expiring-soon (DodoPartage - Notifications)');
+  console.log('- POST /api/partage/send-expiration-reminder (DodoPartage - Notifications)');
+  console.log('- GET /api/partage/get-recently-expired (DodoPartage - Notifications)');
+  console.log('- POST /api/partage/send-post-expiration-notification (DodoPartage - Notifications)');
   console.log('- GET /test-email-validation (Test email)');
 });
 

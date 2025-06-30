@@ -1,0 +1,289 @@
+name: 📧 DodoPartage - Notifications d'Expiration Quotidiennes
+
+on:
+  schedule:
+    # Rappels 3 jours avant expiration - 5h UTC (7h Paris)
+    - cron: '0 5 * * *'
+    # Expiration automatique - 6h UTC (8h Paris) 
+    - cron: '0 6 * * *'
+    # Notifications post-expiration - 7h UTC (9h Paris)
+    - cron: '0 7 * * *'
+  
+  # Permettre l'exécution manuelle
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Tâche à exécuter'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - reminders
+          - expiration
+          - notifications
+
+env:
+  BACKEND_URL: https://web-production-7b738.up.railway.app
+
+jobs:
+  determine-task:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run_reminders: ${{ steps.determine.outputs.should_run_reminders }}
+      should_run_expiration: ${{ steps.determine.outputs.should_run_expiration }}
+      should_run_notifications: ${{ steps.determine.outputs.should_run_notifications }}
+    steps:
+      - name: 🎯 Déterminer les tâches à exécuter
+        id: determine
+        run: |
+          current_hour=$(date -u +%H)
+          manual_task="${{ github.event.inputs.task }}"
+          
+          echo "🕐 Heure UTC actuelle: ${current_hour}h"
+          echo "📝 Tâche manuelle: ${manual_task}"
+          
+          # Logique pour les tâches automatiques (cron)
+          if [ -z "$manual_task" ]; then
+            if [ "$current_hour" = "05" ]; then
+              echo "should_run_reminders=true" >> $GITHUB_OUTPUT
+              echo "should_run_expiration=false" >> $GITHUB_OUTPUT  
+              echo "should_run_notifications=false" >> $GITHUB_OUTPUT
+              echo "🔔 Planifié: Rappels J-3 uniquement"
+            elif [ "$current_hour" = "06" ]; then
+              echo "should_run_reminders=false" >> $GITHUB_OUTPUT
+              echo "should_run_expiration=true" >> $GITHUB_OUTPUT
+              echo "should_run_notifications=false" >> $GITHUB_OUTPUT
+              echo "⏰ Planifié: Expiration uniquement"
+            elif [ "$current_hour" = "07" ]; then
+              echo "should_run_reminders=false" >> $GITHUB_OUTPUT
+              echo "should_run_expiration=false" >> $GITHUB_OUTPUT
+              echo "should_run_notifications=true" >> $GITHUB_OUTPUT
+              echo "📧 Planifié: Notifications post-expiration uniquement"
+            else
+              echo "should_run_reminders=false" >> $GITHUB_OUTPUT
+              echo "should_run_expiration=false" >> $GITHUB_OUTPUT
+              echo "should_run_notifications=false" >> $GITHUB_OUTPUT
+              echo "😴 Aucune tâche planifiée pour cette heure"
+            fi
+          # Logique pour l'exécution manuelle
+          else
+            if [ "$manual_task" = "all" ]; then
+              echo "should_run_reminders=true" >> $GITHUB_OUTPUT
+              echo "should_run_expiration=true" >> $GITHUB_OUTPUT
+              echo "should_run_notifications=true" >> $GITHUB_OUTPUT
+              echo "🚀 Manuel: Toutes les tâches"
+            elif [ "$manual_task" = "reminders" ]; then
+              echo "should_run_reminders=true" >> $GITHUB_OUTPUT
+              echo "should_run_expiration=false" >> $GITHUB_OUTPUT
+              echo "should_run_notifications=false" >> $GITHUB_OUTPUT
+              echo "🔔 Manuel: Rappels uniquement"
+            elif [ "$manual_task" = "expiration" ]; then
+              echo "should_run_reminders=false" >> $GITHUB_OUTPUT
+              echo "should_run_expiration=true" >> $GITHUB_OUTPUT
+              echo "should_run_notifications=false" >> $GITHUB_OUTPUT
+              echo "⏰ Manuel: Expiration uniquement"
+            elif [ "$manual_task" = "notifications" ]; then
+              echo "should_run_reminders=false" >> $GITHUB_OUTPUT
+              echo "should_run_expiration=false" >> $GITHUB_OUTPUT
+              echo "should_run_notifications=true" >> $GITHUB_OUTPUT
+              echo "📧 Manuel: Notifications uniquement"
+            fi
+          fi
+
+  send-expiration-reminders:
+    needs: determine-task
+    if: needs.determine-task.outputs.should_run_reminders == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔔 Envoi des rappels d'expiration (J-3)
+        run: |
+          echo "📅 Calcul de la date J+3..."
+          reminder_date=$(date -d "+3 days" +%Y-%m-%d)
+          echo "🎯 Date cible: $reminder_date"
+          
+          echo "📡 Récupération des annonces expirant dans 3 jours..."
+          response=$(curl -s -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            "${{ env.BACKEND_URL }}/api/partage/get-expiring-soon?reminderDate=${reminder_date}")
+          
+          http_code=$(echo "$response" | tail -c 4)
+          body=$(echo "$response" | head -c -4)
+          
+          if [ "$http_code" = "200" ]; then
+            count=$(echo "$body" | jq -r '.data | length')
+            echo "✅ API accessible - $count annonce(s) trouvée(s)"
+            
+            if [ "$count" -gt 0 ]; then
+              echo "📧 Envoi des emails de rappel..."
+              
+              # Extraire les IDs et envoyer les rappels
+              echo "$body" | jq -r '.data[].id' | while read -r announcement_id; do
+                echo "📮 Envoi rappel pour annonce: $announcement_id"
+                
+                curl_response=$(curl -s -w "%{http_code}" \
+                  -X POST \
+                  -H "Content-Type: application/json" \
+                  -d "{\"announcementId\":\"$announcement_id\",\"reminderType\":\"3_days_before\"}" \
+                  "${{ env.BACKEND_URL }}/api/partage/send-expiration-reminder")
+                
+                email_http_code=$(echo "$curl_response" | tail -c 4)
+                
+                if [ "$email_http_code" = "200" ]; then
+                  echo "  ✅ Email envoyé avec succès"
+                else
+                  echo "  ❌ Erreur envoi email: $email_http_code"
+                fi
+              done
+              
+              echo "📊 Processus de rappel terminé"
+            else
+              echo "😴 Aucun rappel à envoyer aujourd'hui"
+            fi
+          else
+            echo "❌ Erreur API: $http_code"
+            echo "$body"
+            exit 1
+          fi
+
+  expire-announcements:
+    needs: determine-task
+    if: needs.determine-task.outputs.should_run_expiration == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⏰ Expiration automatique des annonces
+        run: |
+          echo "🚀 Déclenchement du processus d'expiration..."
+          
+          response=$(curl -s -w "%{http_code}" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            "${{ env.BACKEND_URL }}/api/cron/expire-announcements")
+          
+          http_code=$(echo "$response" | tail -c 4)
+          body=$(echo "$response" | head -c -4)
+          
+          if [ "$http_code" = "200" ]; then
+            echo "✅ Processus d'expiration réussi"
+            
+            # Extraire les statistiques
+            expired_count=$(echo "$body" | jq -r '.expired // 0')
+            remaining_count=$(echo "$body" | jq -r '.remaining_published // 0')
+            duration=$(echo "$body" | jq -r '.duration // "unknown"')
+            
+            echo "📊 Statistiques:"
+            echo "  • Annonces expirées: $expired_count"
+            echo "  • Annonces restantes: $remaining_count" 
+            echo "  • Durée: $duration"
+            
+            # Afficher les détails des annonces expirées
+            if [ "$expired_count" -gt 0 ]; then
+              echo "📋 Annonces expirées:"
+              echo "$body" | jq -r '.details[]? | "  • \(.name) - \(.route)"'
+            fi
+          else
+            echo "❌ Erreur processus d'expiration: $http_code"
+            echo "$body"
+            exit 1
+          fi
+
+  send-post-expiration-notifications:
+    needs: [determine-task, expire-announcements]
+    if: always() && needs.determine-task.outputs.should_run_notifications == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📧 Notifications post-expiration
+        run: |
+          echo "📅 Récupération des annonces récemment expirées..."
+          
+          response=$(curl -s -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            "${{ env.BACKEND_URL }}/api/partage/get-recently-expired")
+          
+          http_code=$(echo "$response" | tail -c 4)
+          body=$(echo "$response" | head -c -4)
+          
+          if [ "$http_code" = "200" ]; then
+            count=$(echo "$body" | jq -r '.data | length')
+            echo "✅ API accessible - $count annonce(s) récemment expirée(s)"
+            
+            if [ "$count" -gt 0 ]; then
+              echo "📧 Envoi des notifications post-expiration..."
+              
+              # Extraire les données et envoyer les notifications
+              echo "$body" | jq -r '.data[] | "\(.id)|\(.expired_at)|\(.expiration_reason // "unknown")"' | while IFS='|' read -r announcement_id expired_at expiration_reason; do
+                echo "📮 Notification pour annonce: $announcement_id"
+                
+                curl_response=$(curl -s -w "%{http_code}" \
+                  -X POST \
+                  -H "Content-Type: application/json" \
+                  -d "{\"announcementId\":\"$announcement_id\",\"expiredAt\":\"$expired_at\",\"expirationReason\":\"$expiration_reason\"}" \
+                  "${{ env.BACKEND_URL }}/api/partage/send-post-expiration-notification")
+                
+                email_http_code=$(echo "$curl_response" | tail -c 4)
+                
+                if [ "$email_http_code" = "200" ]; then
+                  echo "  ✅ Notification envoyée avec succès"
+                else
+                  echo "  ❌ Erreur envoi notification: $email_http_code"
+                fi
+              done
+              
+              echo "📊 Processus de notification terminé"
+            else
+              echo "😴 Aucune notification à envoyer"
+            fi
+          else
+            echo "❌ Erreur API: $http_code"
+            echo "$body"
+            exit 1
+          fi
+
+  summary:
+    needs: [determine-task, send-expiration-reminders, expire-announcements, send-post-expiration-notifications]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📊 Résumé de l'exécution
+        run: |
+          echo "🎯 RÉSUMÉ NOTIFICATIONS DODOPARTAGE"
+          echo "=================================="
+          echo ""
+          echo "📅 Date: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+          echo "🕐 Heure: $(date -u +%H)h UTC ($(date +'%H')h Local)"
+          echo ""
+          echo "📋 Tâches exécutées:"
+          
+          if [ "${{ needs.determine-task.outputs.should_run_reminders }}" = "true" ]; then
+            if [ "${{ needs.send-expiration-reminders.result }}" = "success" ]; then
+              echo "  ✅ Rappels J-3: Réussi"
+            else
+              echo "  ❌ Rappels J-3: Échec"
+            fi
+          else
+            echo "  ⏭️ Rappels J-3: Non planifié"
+          fi
+          
+          if [ "${{ needs.determine-task.outputs.should_run_expiration }}" = "true" ]; then
+            if [ "${{ needs.expire-announcements.result }}" = "success" ]; then
+              echo "  ✅ Expiration: Réussi"
+            else
+              echo "  ❌ Expiration: Échec"
+            fi
+          else
+            echo "  ⏭️ Expiration: Non planifié"
+          fi
+          
+          if [ "${{ needs.determine-task.outputs.should_run_notifications }}" = "true" ]; then
+            if [ "${{ needs.send-post-expiration-notifications.result }}" = "success" ]; then
+              echo "  ✅ Notifications post: Réussi"
+            else
+              echo "  ❌ Notifications post: Échec"
+            fi
+          else
+            echo "  ⏭️ Notifications post: Non planifié"
+          fi
+          
+          echo ""
+          echo "🔗 Surveillance: https://github.com/${{ github.repository }}/actions"
+          echo "📊 Backend: ${{ env.BACKEND_URL }}/health" 
