@@ -4196,12 +4196,13 @@ app.post('/api/cron/expire-announcements', async (req, res) => {
     const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
     console.log('📋 Traitement d\'expiration pour la table:', partageTableName);
 
-    // 1. Récupérer toutes les annonces publiées avec expired_at rempli
+    // 1. Récupérer toutes les annonces publiées avec expires_at rempli ET dépassé
     console.log('🔍 Recherche des annonces expirées...');
     
+    const now = new Date().toISOString();
     const expiredRecords = await base(partageTableName).select({
-      filterByFormula: `AND({status} = 'published', {expired_at} != '')`,
-      fields: ['id', 'status', 'request_type', 'shipping_date', 'created_at', 'expired_at', 'contact_first_name', 'departure_country', 'arrival_country']
+      filterByFormula: `AND({status} = 'published', {expires_at} != '', {expires_at} <= '${now}')`,
+      fields: ['id', 'status', 'request_type', 'shipping_date', 'created_at', 'expires_at', 'contact_first_name', 'departure_country', 'arrival_country']
     }).all();
 
     console.log(`📊 ${expiredRecords.length} annonce(s) expirée(s) trouvée(s)`);
@@ -4224,7 +4225,8 @@ app.post('/api/cron/expire-announcements', async (req, res) => {
     const updatePromises = expiredRecords.map(async (record) => {
       try {
         await base(partageTableName).update(record.id, {
-          status: 'expired'
+          status: 'expired',
+          expired_at: new Date().toISOString()
         });
         
         console.log(`✅ Annonce ${record.fields.contact_first_name} (${record.fields.departure_country} → ${record.fields.arrival_country}) expirée`);
