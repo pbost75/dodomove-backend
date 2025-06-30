@@ -176,6 +176,332 @@ Airtable.configure({
 const base = Airtable.base(process.env.AIRTABLE_BASE_ID);
 console.log('Airtable configuré:', !!process.env.AIRTABLE_API_KEY && !!process.env.AIRTABLE_BASE_ID);
 
+// ========================================
+// FONCTIONS HELPER GLOBALES
+// ========================================
+
+// Fonction helper pour générer des UTM cohérents pour les emails DodoPartage
+function generateUTMUrl(baseUrl, emailType, content = 'link') {
+  const utm = new URLSearchParams({
+    utm_source: 'transactionnel',
+    utm_medium: 'email',
+    utm_campaign: `dodopartage-${emailType}`,
+    utm_content: content
+  });
+  
+  const separator = baseUrl.includes('?') ? '&' : '?';
+  return `${baseUrl}${separator}${utm.toString()}`;
+}
+
+// ========================================
+// SYSTÈME D'ALERTES EMAIL AUTOMATIQUES
+// ========================================
+
+// Fonction pour trouver les alertes correspondant à une annonce
+async function findMatchingAlerts(announcement) {
+  try {
+    console.log('🔍 Recherche d\'alertes correspondantes pour:', announcement.reference);
+    
+    const emailAlertTableId = process.env.AIRTABLE_EMAIL_ALERT_TABLE_ID || 'tblVuVneCZTot07sB';
+    
+    // Récupérer toutes les alertes actives
+    const alertRecords = await base(emailAlertTableId).select({
+      filterByFormula: `{status} = 'Active'`,
+      fields: ['type', 'departure', 'arrival', 'volume_min', 'email', 'delete_token']
+    }).all();
+
+    console.log(`📋 ${alertRecords.length} alerte(s) active(s) trouvée(s)`);
+    
+    const matchingAlerts = [];
+    
+    for (const alertRecord of alertRecords) {
+      const alert = alertRecord.fields;
+      
+      // Vérifier la correspondance
+      if (isAlertMatch(alert, announcement)) {
+        matchingAlerts.push({
+          id: alertRecord.id,
+          ...alert
+        });
+        console.log(`✅ Alerte correspondante: ${alert.email} (${alert.type})`);
+      }
+    }
+    
+    console.log(`🎯 ${matchingAlerts.length} alerte(s) correspondante(s) trouvée(s)`);
+    return matchingAlerts;
+    
+  } catch (error) {
+    console.error('❌ Erreur lors de la recherche d\'alertes:', error);
+    return [];
+  }
+}
+
+// Fonction pour vérifier si une alerte correspond à une annonce  
+function isAlertMatch(alert, announcement) {
+  // 1. Vérifier le type (logique identique)
+  if (alert.type === 'offer' && announcement.request_type !== 'offer') {
+    return false; // Alerte pour offres, mais l'annonce n'est pas une offre
+  }
+  if (alert.type === 'request' && announcement.request_type !== 'search') {
+    return false; // Alerte pour demandes, mais l'annonce n'est pas une recherche
+  }
+  
+  // 2. Vérifier le trajet (normalisation des noms de pays)
+  const normalizeLocation = (location) => {
+    return location?.toLowerCase()
+      .replace(/é/g, 'e')
+      .replace(/è/g, 'e') 
+      .replace(/ç/g, 'c')
+      .replace(/à/g, 'a')
+      .trim();
+  };
+  
+  const alertDeparture = normalizeLocation(alert.departure);
+  const alertArrival = normalizeLocation(alert.arrival);
+  const announcementDeparture = normalizeLocation(announcement.departure_country);
+  const announcementArrival = normalizeLocation(announcement.arrival_country);
+  
+  if (alertDeparture !== announcementDeparture || alertArrival !== announcementArrival) {
+    return false;
+  }
+  
+  // 3. Vérifier le volume
+  const alertVolumeMin = parseFloat(alert.volume_min) || 0;
+  let announcementVolume = 0;
+  
+  if (announcement.request_type === 'offer') {
+    // Pour les offres : volume disponible dans le conteneur
+    announcementVolume = parseFloat(announcement.container_available_volume) || 0;
+  } else if (announcement.request_type === 'search') {
+    // Pour les recherches : volume recherché
+    announcementVolume = parseFloat(announcement.volume_needed) || 0;
+  }
+  
+  if (alertVolumeMin > announcementVolume) {
+    return false; // Volume de l'annonce insuffisant
+  }
+  
+  return true; // Toutes les conditions sont remplies
+}
+
+// Fonction pour envoyer une notification d'alerte par email
+async function sendAlertNotification(alert, announcement) {
+  try {
+    console.log(`📧 Envoi notification alerte à: ${alert.email}`);
+    
+    // Préparer les données pour l'email
+    const announcementType = announcement.request_type === 'offer' ? 'propose' : 'cherche';
+    const alertType = alert.type === 'offer' ? 'personnes qui proposent' : 'personnes qui cherchent';
+    const trajet = `${announcement.departure_country} → ${announcement.arrival_country}`;
+    
+    // Volume à afficher
+    let volumeText = '';
+    if (announcement.request_type === 'offer') {
+      volumeText = `${announcement.container_available_volume}m³ disponibles`;
+    } else {
+      volumeText = `${announcement.volume_needed}m³ recherchés`;
+    }
+    
+    // Date de départ
+    let dateText = '';
+    if (announcement.shipping_date) {
+      const shippingDate = new Date(announcement.shipping_date);
+      dateText = shippingDate.toLocaleDateString('fr-FR', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } else if (announcement.shipping_period_formatted) {
+      dateText = announcement.shipping_period_formatted;
+    }
+    
+    // URL vers l'annonce
+    const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://www.dodomove.fr/partage';
+    const announcementUrl = `${frontendUrl}/annonce/${announcement.reference}`;
+    
+    // URL de désabonnement
+    const unsubscribeUrl = `${frontendUrl}/supprimer-alerte/${alert.delete_token}`;
+    
+    // Envoyer l'email avec design cohérent DodoPartage
+    const { data: emailData, error: emailError } = await resend.emails.send({
+      from: 'DodoPartage <noreply@dodomove.fr>',
+      to: [alert.email],
+      subject: `🔔 Nouvelle annonce trouvée : ${trajet}`,
+      html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Nouvelle annonce DodoPartage</title>
+      </head>
+      <body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; line-height: 1.6;">
+        <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
+          
+          <!-- Header -->
+          <div style="background: linear-gradient(135deg, #243163 0%, #1e2951 100%); padding: 40px 30px; text-align: center;">
+            <h1 style="color: white; font-family: 'Inter', sans-serif; font-size: 28px; margin: 0; font-weight: 700;">
+              🔔 DodoPartage
+            </h1>
+            <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
+              Nouvelle annonce trouvée !
+            </p>
+          </div>
+          
+          <!-- Contenu principal -->
+          <div style="padding: 40px 30px;">
+            <h2 style="color: #1e293b; font-size: 24px; margin: 0 0 20px 0; font-weight: 600;">
+              📦 ${announcement.contact_first_name} ${announcementType} de la place
+            </h2>
+            
+            <p style="color: #475569; font-size: 16px; margin: 0 0 30px 0;">
+              Une nouvelle annonce correspond à votre alerte <strong>"${alertType}"</strong> !
+            </p>
+            
+            <!-- Détails de l'annonce -->
+            <div style="background-color: #f1f5f9; border-radius: 12px; padding: 24px; margin: 30px 0;">
+              <h3 style="color: #334155; font-size: 18px; margin: 0 0 16px 0; font-weight: 600;">
+                📋 Détails de l'annonce
+              </h3>
+              <div style="color: #64748b; font-size: 14px; line-height: 1.6;">
+                <div style="margin-bottom: 8px;">
+                  <strong>🗺️ Trajet:</strong> ${trajet}
+                </div>
+                <div style="margin-bottom: 8px;">
+                  <strong>📦 Volume:</strong> ${volumeText}
+                </div>
+                ${dateText ? `<div style="margin-bottom: 8px;"><strong>📅 Date:</strong> ${dateText}</div>` : ''}
+                <div style="margin-bottom: 8px;">
+                  <strong>📞 Contact:</strong> ${announcement.contact_first_name}
+                </div>
+                <div>
+                  <strong>📧 Référence:</strong> ${announcement.reference}
+                </div>
+              </div>
+            </div>
+            
+            <!-- Description de l'annonce -->
+            ${announcement.announcement_text ? `
+            <div style="border-left: 4px solid #F47D6C; background-color: #fef2f2; padding: 20px; margin: 30px 0;">
+              <h4 style="color: #dc2626; font-size: 16px; margin: 0 0 8px 0; font-weight: 600;">
+                💬 Message de ${announcement.contact_first_name}
+              </h4>
+              <p style="color: #7f1d1d; font-size: 14px; margin: 0; line-height: 1.4;">
+                ${announcement.announcement_text.substring(0, 200)}${announcement.announcement_text.length > 200 ? '...' : ''}
+              </p>
+            </div>
+            ` : ''}
+            
+            <!-- Bouton principal -->
+            <div style="text-align: center; margin: 32px 0;">
+              <a href="${generateUTMUrl(announcementUrl, 'alert-notification', 'view_announcement')}" 
+                 style="display: inline-block; background-color: #F47D6C; color: white; padding: 16px 32px; 
+                        text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                🔍 Voir l'annonce complète
+              </a>
+            </div>
+            
+            <!-- Information sur l'alerte -->
+            <div style="background-color: #f8fafc; border-radius: 8px; padding: 20px; margin: 30px 0;">
+              <h4 style="color: #374151; font-size: 14px; margin: 0 0 8px 0; font-weight: 600;">
+                🎯 Votre alerte : "${alertType}"
+              </h4>
+              <p style="color: #6b7280; font-size: 12px; margin: 0;">
+                Trajet: ${alert.departure} → ${alert.arrival} | Volume min: ${alert.volume_min}m³
+              </p>
+            </div>
+            
+            <!-- Lien de désabonnement -->
+            <div style="text-align: center; margin: 24px 0;">
+              <p style="color: #6b7280; font-size: 13px; margin: 0;">
+                <a href="${generateUTMUrl(unsubscribeUrl, 'alert-notification', 'unsubscribe')}" style="color: #6b7280; text-decoration: underline;">
+                  Se désabonner de cette alerte
+                </a>
+              </p>
+            </div>
+            
+          </div>
+          
+          <!-- Footer -->
+          <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+            <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+              © 2024 DodoPartage - Une initiative 
+              <a href="${generateUTMUrl('https://dodomove.fr', 'alert-notification', 'footer')}" style="color: #243163; text-decoration: none;">Dodomove</a>
+            </p>
+          </div>
+          
+        </div>
+      </body>
+      </html>
+      `
+    });
+
+    if (emailError) {
+      console.error('❌ Erreur envoi email alerte:', emailError);
+      return false;
+    }
+
+    console.log(`✅ Email alerte envoyé avec succès: ${emailData.id}`);
+    return true;
+    
+  } catch (error) {
+    console.error('❌ Erreur lors de l\'envoi de notification d\'alerte:', error);
+    return false;
+  }
+}
+
+// Fonction principale pour vérifier et envoyer toutes les notifications d'alertes
+async function checkAndSendAlertNotifications(announcement) {
+  try {
+    console.log('🔔 Vérification des alertes pour l\'annonce:', announcement.reference);
+    
+    // Trouver les alertes correspondantes
+    const matchingAlerts = await findMatchingAlerts(announcement);
+    
+    if (matchingAlerts.length === 0) {
+      console.log('📭 Aucune alerte correspondante trouvée');
+      return { success: true, alertsSent: 0, details: 'Aucune alerte correspondante' };
+    }
+    
+    // Envoyer les notifications
+    let successCount = 0;
+    const results = [];
+    
+    for (const alert of matchingAlerts) {
+      const sent = await sendAlertNotification(alert, announcement);
+      if (sent) {
+        successCount++;
+        results.push({ email: alert.email, status: 'sent' });
+      } else {
+        results.push({ email: alert.email, status: 'failed' });
+      }
+      
+      // Petite pause entre les envois pour éviter le rate limiting
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    console.log(`📊 Résumé notifications: ${successCount}/${matchingAlerts.length} envoyées`);
+    
+    return {
+      success: true,
+      alertsSent: successCount,
+      totalAlerts: matchingAlerts.length,
+      results: results,
+      details: `${successCount} notification(s) envoyée(s) sur ${matchingAlerts.length} alerte(s) correspondante(s)`
+    };
+    
+  } catch (error) {
+    console.error('❌ Erreur lors de la vérification des alertes:', error);
+    return {
+      success: false,
+      alertsSent: 0,
+      error: error.message,
+      details: 'Erreur lors de la vérification des alertes'
+    };
+  }
+}
+
 // Fonction utilitaire pour générer le HTML des items
 function generateItemsHTML(items) {
   let html = '<table style="width:100%; border-collapse: collapse; margin-bottom: 20px;">';
@@ -1373,334 +1699,12 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
       });
     }
 
-    // Fonction helper pour générer des UTM cohérents pour les emails DodoPartage
-    const generateUTMUrl = (baseUrl, emailType, content = 'link') => {
-      const utm = new URLSearchParams({
-        utm_source: 'transactionnel',
-        utm_medium: 'email',
-        utm_campaign: `dodopartage-${emailType}`,
-        utm_content: content
-      });
-      
-      const separator = baseUrl.includes('?') ? '&' : '?';
-      return `${baseUrl}${separator}${utm.toString()}`;
-    };
-
     // Générer une référence unique pour l'annonce
     const generateAnnouncementReference = () => {
       const timestamp = Date.now().toString();
       const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
       return `PARTAGE-${timestamp.slice(-6)}-${randomSuffix}`;
     };
-
-    // ========================================
-    // SYSTÈME D'ALERTES EMAIL AUTOMATIQUES
-    // ========================================
-
-    // Fonction pour trouver les alertes correspondant à une annonce
-    async function findMatchingAlerts(announcement) {
-      try {
-        console.log('🔍 Recherche d\'alertes correspondantes pour:', announcement.reference);
-        
-        const emailAlertTableId = process.env.AIRTABLE_EMAIL_ALERT_TABLE_ID || 'tblVuVneCZTot07sB';
-        
-        // Récupérer toutes les alertes actives
-        const alertRecords = await base(emailAlertTableId).select({
-          filterByFormula: `{status} = 'Active'`,
-          fields: ['type', 'departure', 'arrival', 'volume_min', 'email', 'delete_token']
-        }).all();
-
-        console.log(`📋 ${alertRecords.length} alerte(s) active(s) trouvée(s)`);
-        
-        const matchingAlerts = [];
-        
-        for (const alertRecord of alertRecords) {
-          const alert = alertRecord.fields;
-          
-          // Vérifier la correspondance
-          if (isAlertMatch(alert, announcement)) {
-            matchingAlerts.push({
-              id: alertRecord.id,
-              ...alert
-            });
-            console.log(`✅ Alerte correspondante: ${alert.email} (${alert.type})`);
-          }
-        }
-        
-        console.log(`🎯 ${matchingAlerts.length} alerte(s) correspondante(s) trouvée(s)`);
-        return matchingAlerts;
-        
-      } catch (error) {
-        console.error('❌ Erreur lors de la recherche d\'alertes:', error);
-        return [];
-      }
-    }
-
-    // Fonction pour vérifier si une alerte correspond à une annonce  
-    function isAlertMatch(alert, announcement) {
-      // 1. Vérifier le type (logique opposée)
-      if (alert.type === 'offer' && announcement.request_type !== 'offer') {
-        return false; // Alerte pour offres, mais l'annonce n'est pas une offre
-      }
-      if (alert.type === 'request' && announcement.request_type !== 'search') {
-        return false; // Alerte pour demandes, mais l'annonce n'est pas une recherche
-      }
-      
-      // 2. Vérifier le trajet (normalisation des noms de pays)
-      const normalizeLocation = (location) => {
-        return location?.toLowerCase()
-          .replace(/é/g, 'e')
-          .replace(/è/g, 'e') 
-          .replace(/ç/g, 'c')
-          .replace(/à/g, 'a')
-          .trim();
-      };
-      
-      const alertDeparture = normalizeLocation(alert.departure);
-      const alertArrival = normalizeLocation(alert.arrival);
-      const announcementDeparture = normalizeLocation(announcement.departure_country);
-      const announcementArrival = normalizeLocation(announcement.arrival_country);
-      
-      if (alertDeparture !== announcementDeparture || alertArrival !== announcementArrival) {
-        return false;
-      }
-      
-      // 3. Vérifier le volume
-      const alertVolumeMin = parseFloat(alert.volume_min) || 0;
-      let announcementVolume = 0;
-      
-      if (announcement.request_type === 'offer') {
-        // Pour les offres : volume disponible dans le conteneur
-        announcementVolume = parseFloat(announcement.container_available_volume) || 0;
-      } else if (announcement.request_type === 'search') {
-        // Pour les recherches : volume recherché
-        announcementVolume = parseFloat(announcement.volume_needed) || 0;
-      }
-      
-      if (alertVolumeMin > announcementVolume) {
-        return false; // Volume de l'annonce insuffisant
-      }
-      
-      return true; // Toutes les conditions sont remplies
-    }
-
-    // Fonction pour envoyer une notification d'alerte par email
-    async function sendAlertNotification(alert, announcement) {
-      try {
-        console.log(`📧 Envoi notification alerte à: ${alert.email}`);
-        
-        // Préparer les données pour l'email
-        const announcementType = announcement.request_type === 'offer' ? 'propose' : 'cherche';
-        const alertType = alert.type === 'offer' ? 'personnes qui proposent' : 'personnes qui cherchent';
-        const trajet = `${announcement.departure_country} → ${announcement.arrival_country}`;
-        
-        // Volume à afficher
-        let volumeText = '';
-        if (announcement.request_type === 'offer') {
-          volumeText = `${announcement.container_available_volume}m³ disponibles`;
-        } else {
-          volumeText = `${announcement.volume_needed}m³ recherchés`;
-        }
-        
-        // Date de départ
-        let dateText = '';
-        if (announcement.shipping_date) {
-          const shippingDate = new Date(announcement.shipping_date);
-          dateText = shippingDate.toLocaleDateString('fr-FR', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-          });
-        } else if (announcement.shipping_period_formatted) {
-          dateText = announcement.shipping_period_formatted;
-        }
-        
-        // URL vers l'annonce
-        const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://www.dodomove.fr/partage';
-        const announcementUrl = `${frontendUrl}/annonce/${announcement.reference}`;
-        
-        // URL de désabonnement
-        const unsubscribeUrl = `${frontendUrl}/supprimer-alerte/${alert.delete_token}`;
-        
-        // Envoyer l'email avec design cohérent DodoPartage
-        const { data: emailData, error: emailError } = await resend.emails.send({
-          from: 'DodoPartage <noreply@dodomove.fr>',
-          to: [alert.email],
-          subject: `🔔 Nouvelle annonce trouvée : ${trajet}`,
-          html: `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Nouvelle annonce DodoPartage</title>
-          </head>
-          <body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; line-height: 1.6;">
-            <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
-              
-              <!-- Header -->
-              <div style="background: linear-gradient(135deg, #243163 0%, #1e2951 100%); padding: 40px 30px; text-align: center;">
-                <h1 style="color: white; font-family: 'Inter', sans-serif; font-size: 28px; margin: 0; font-weight: 700;">
-                  🔔 DodoPartage
-                </h1>
-                <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
-                  Nouvelle annonce trouvée !
-                </p>
-              </div>
-              
-              <!-- Contenu principal -->
-              <div style="padding: 40px 30px;">
-                <h2 style="color: #1e293b; font-size: 24px; margin: 0 0 20px 0; font-weight: 600;">
-                  📦 ${announcement.contact_first_name} ${announcementType} de la place
-                </h2>
-                
-                <p style="color: #475569; font-size: 16px; margin: 0 0 30px 0;">
-                  Une nouvelle annonce correspond à votre alerte <strong>"${alertType}"</strong> !
-                </p>
-                
-                <!-- Détails de l'annonce -->
-                <div style="background-color: #f1f5f9; border-radius: 12px; padding: 24px; margin: 30px 0;">
-                  <h3 style="color: #334155; font-size: 18px; margin: 0 0 16px 0; font-weight: 600;">
-                    📋 Détails de l'annonce
-                  </h3>
-                  <div style="color: #64748b; font-size: 14px; line-height: 1.6;">
-                    <div style="margin-bottom: 8px;">
-                      <strong>🗺️ Trajet:</strong> ${trajet}
-                    </div>
-                    <div style="margin-bottom: 8px;">
-                      <strong>📦 Volume:</strong> ${volumeText}
-                    </div>
-                    ${dateText ? `<div style="margin-bottom: 8px;"><strong>📅 Date:</strong> ${dateText}</div>` : ''}
-                    <div style="margin-bottom: 8px;">
-                      <strong>📞 Contact:</strong> ${announcement.contact_first_name}
-                    </div>
-                    <div>
-                      <strong>📧 Référence:</strong> ${announcement.reference}
-                    </div>
-                  </div>
-                </div>
-                
-                <!-- Description de l'annonce -->
-                ${announcement.announcement_text ? `
-                <div style="border-left: 4px solid #F47D6C; background-color: #fef2f2; padding: 20px; margin: 30px 0;">
-                  <h4 style="color: #dc2626; font-size: 16px; margin: 0 0 8px 0; font-weight: 600;">
-                    💬 Message de ${announcement.contact_first_name}
-                  </h4>
-                  <p style="color: #7f1d1d; font-size: 14px; margin: 0; line-height: 1.4;">
-                    ${announcement.announcement_text.substring(0, 200)}${announcement.announcement_text.length > 200 ? '...' : ''}
-                  </p>
-                </div>
-                ` : ''}
-                
-                <!-- Bouton principal -->
-                <div style="text-align: center; margin: 32px 0;">
-                  <a href="${generateUTMUrl(announcementUrl, 'alert-notification', 'view_announcement')}" 
-                     style="display: inline-block; background-color: #F47D6C; color: white; padding: 16px 32px; 
-                            text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
-                    🔍 Voir l'annonce complète
-                  </a>
-                </div>
-                
-                <!-- Information sur l'alerte -->
-                <div style="background-color: #f8fafc; border-radius: 8px; padding: 20px; margin: 30px 0;">
-                  <h4 style="color: #374151; font-size: 14px; margin: 0 0 8px 0; font-weight: 600;">
-                    🎯 Votre alerte : "${alertType}"
-                  </h4>
-                  <p style="color: #6b7280; font-size: 12px; margin: 0;">
-                    Trajet: ${alert.departure} → ${alert.arrival} | Volume min: ${alert.volume_min}m³
-                  </p>
-                </div>
-                
-                <!-- Lien de désabonnement -->
-                <div style="text-align: center; margin: 24px 0;">
-                  <p style="color: #6b7280; font-size: 13px; margin: 0;">
-                    <a href="${generateUTMUrl(unsubscribeUrl, 'alert-notification', 'unsubscribe')}" style="color: #6b7280; text-decoration: underline;">
-                      Se désabonner de cette alerte
-                    </a>
-                  </p>
-                </div>
-                
-              </div>
-              
-              <!-- Footer -->
-              <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
-                <p style="color: #94a3b8; font-size: 12px; margin: 0;">
-                  © 2024 DodoPartage - Une initiative 
-                  <a href="${generateUTMUrl('https://dodomove.fr', 'alert-notification', 'footer')}" style="color: #243163; text-decoration: none;">Dodomove</a>
-                </p>
-              </div>
-              
-            </div>
-          </body>
-          </html>
-          `
-        });
-
-        if (emailError) {
-          console.error('❌ Erreur envoi email alerte:', emailError);
-          return false;
-        }
-
-        console.log(`✅ Email alerte envoyé avec succès: ${emailData.id}`);
-        return true;
-        
-      } catch (error) {
-        console.error('❌ Erreur lors de l\'envoi de notification d\'alerte:', error);
-        return false;
-      }
-    }
-
-    // Fonction principale pour vérifier et envoyer toutes les notifications d'alertes
-    async function checkAndSendAlertNotifications(announcement) {
-      try {
-        console.log('🔔 Vérification des alertes pour l\'annonce:', announcement.reference);
-        
-        // Trouver les alertes correspondantes
-        const matchingAlerts = await findMatchingAlerts(announcement);
-        
-        if (matchingAlerts.length === 0) {
-          console.log('📭 Aucune alerte correspondante trouvée');
-          return { success: true, alertsSent: 0, details: 'Aucune alerte correspondante' };
-        }
-        
-        // Envoyer les notifications
-        let successCount = 0;
-        const results = [];
-        
-        for (const alert of matchingAlerts) {
-          const sent = await sendAlertNotification(alert, announcement);
-          if (sent) {
-            successCount++;
-            results.push({ email: alert.email, status: 'sent' });
-          } else {
-            results.push({ email: alert.email, status: 'failed' });
-          }
-          
-          // Petite pause entre les envois pour éviter le rate limiting
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-        
-        console.log(`📊 Résumé notifications: ${successCount}/${matchingAlerts.length} envoyées`);
-        
-        return {
-          success: true,
-          alertsSent: successCount,
-          totalAlerts: matchingAlerts.length,
-          results: results,
-          details: `${successCount} notification(s) envoyée(s) sur ${matchingAlerts.length} alerte(s) correspondante(s)`
-        };
-        
-      } catch (error) {
-        console.error('❌ Erreur lors de la vérification des alertes:', error);
-        return {
-          success: false,
-          alertsSent: 0,
-          error: error.message,
-          details: 'Erreur lors de la vérification des alertes'
-        };
-      }
-    }
 
     const reference = generateAnnouncementReference();
     console.log('Référence générée:', reference);
