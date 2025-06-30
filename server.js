@@ -1494,7 +1494,7 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
         
         // Utiliser le token de validation déjà stocké dans Airtable
         const validationToken = airtableData.fields.validation_token;
-        const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://partage.dodomove.fr';
+        const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://www.dodomove.fr/partage';
         const validationUrl = `${frontendUrl}/api/validate-announcement?token=${validationToken}`;
         
         console.log('🔑 Token de validation utilisé:', validationToken);
@@ -2065,7 +2065,7 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
         
         // Utiliser le token de validation déjà stocké dans Airtable
         const validationToken = airtableData.fields.validation_token;
-        const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://partage.dodomove.fr';
+        const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://www.dodomove.fr/partage';
         const validationUrl = `${frontendUrl}/api/validate-announcement?token=${validationToken}`;
         
         console.log('🔑 Token de validation utilisé:', validationToken);
@@ -2330,7 +2330,7 @@ app.get('/api/partage/validate-announcement', async (req, res) => {
 
     // Envoyer l'email de confirmation post-validation
     try {
-      const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://partage.dodomove.fr';
+      const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://www.dodomove.fr/partage';
       const viewUrl = `${frontendUrl}/annonce/${updatedRecord.fields.reference}`;
       const editUrl = `${frontendUrl}/modifier/${editToken}`;
       const deleteUrl = `${frontendUrl}/supprimer/${deleteToken}`;
@@ -2891,7 +2891,7 @@ app.post('/api/partage/confirm-deletion', async (req, res) => {
               
               <!-- Bouton pour créer une nouvelle annonce -->
               <div style="text-align: center; margin: 32px 0;">
-                <a href="https://partage.dodomove.fr/funnel/propose" 
+                <a href="${frontendUrl}/funnel/propose" 
                    style="display: inline-block; background-color: #F47D6C; color: white; padding: 16px 32px; 
                           text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
                   ➕ Créer une nouvelle annonce
@@ -3202,7 +3202,7 @@ app.post('/api/partage/update-announcement', async (req, res) => {
 
     // Envoyer un email de confirmation de modification
     try {
-      const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://partage.dodomove.fr';
+      const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://www.dodomove.fr/partage';
       const viewUrl = `${frontendUrl}/annonce/${oldData.reference}`;
       
       const { data: emailData, error: emailError } = await resend.emails.send({
@@ -3570,7 +3570,7 @@ app.get('/test-email-validation', async (req, res) => {
     };
     
     const testValidationToken = 'test-token-' + Date.now();
-    const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://partage.dodomove.fr';
+    const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://www.dodomove.fr/partage';
     const validationUrl = `${frontendUrl}/api/validate-announcement?token=${testValidationToken}`;
     
     console.log('📧 Envoi de l\'email de test...');
@@ -4122,7 +4122,7 @@ app.post('/api/partage/delete-alert', async (req, res) => {
               </div>
               
               <div style="text-align: center; margin: 32px 0;">
-                <a href="https://partage.dodomove.fr" 
+                <a href="${process.env.PARTAGE_APP_URL || 'https://www.dodomove.fr/partage'}" 
                    style="display: inline-block; background-color: #F47D6C; color: white; padding: 12px 24px; 
                           text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 14px;">
                   Retour à DodoPartage
@@ -4174,6 +4174,129 @@ app.post('/api/partage/delete-alert', async (req, res) => {
   }
 });
 
+// Route CRON pour expirer les annonces automatiquement
+app.post('/api/cron/expire-announcements', async (req, res) => {
+  console.log('POST /api/cron/expire-announcements appelé');
+  
+  const startTime = Date.now();
+  
+  try {
+    // Vérification des variables d'environnement
+    if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
+      console.error('❌ Variables d\'environnement manquantes: AIRTABLE_API_KEY et AIRTABLE_BASE_ID');
+      return res.status(500).json({
+        success: false,
+        error: 'Variables d\'environnement manquantes',
+        message: 'Configuration Airtable manquante',
+        duration: `${Date.now() - startTime}ms`,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    console.log('📋 Traitement d\'expiration pour la table:', partageTableName);
+
+    // 1. Récupérer toutes les annonces publiées avec expired_at rempli
+    console.log('🔍 Recherche des annonces expirées...');
+    
+    const expiredRecords = await base(partageTableName).select({
+      filterByFormula: `AND({status} = 'published', {expired_at} != '')`,
+      fields: ['id', 'status', 'request_type', 'shipping_date', 'created_at', 'expired_at', 'contact_first_name', 'departure_country', 'arrival_country']
+    }).all();
+
+    console.log(`📊 ${expiredRecords.length} annonce(s) expirée(s) trouvée(s)`);
+
+    if (expiredRecords.length === 0) {
+      const duration = Date.now() - startTime;
+      return res.status(200).json({
+        success: true,
+        message: 'Aucune annonce expirée à traiter',
+        processed: 0,
+        expired: 0,
+        duration: `${duration}ms`,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // 2. Mettre à jour le statut des annonces expirées
+    console.log('⏰ Mise à jour du statut vers "expired"...');
+    
+    const updatePromises = expiredRecords.map(async (record) => {
+      try {
+        await base(partageTableName).update(record.id, {
+          status: 'expired'
+        });
+        
+        console.log(`✅ Annonce ${record.fields.contact_first_name} (${record.fields.departure_country} → ${record.fields.arrival_country}) expirée`);
+        
+        return {
+          id: record.id,
+          success: true,
+          name: record.fields.contact_first_name,
+          route: `${record.fields.departure_country} → ${record.fields.arrival_country}`
+        };
+      } catch (error) {
+        console.error(`❌ Erreur mise à jour annonce ${record.id}:`, error.message);
+        return {
+          id: record.id,
+          success: false,
+          error: error.message
+        };
+      }
+    });
+
+    const results = await Promise.all(updatePromises);
+    const successCount = results.filter(r => r.success).length;
+    const errorCount = results.filter(r => !r.success).length;
+
+    console.log(`📊 Résultat: ${successCount} succès, ${errorCount} erreurs`);
+
+    // 3. Statistiques finales
+    const allPublishedRecords = await base(partageTableName).select({
+      filterByFormula: `AND({status} = 'published')`,
+      fields: ['id', 'request_type', 'shipping_date', 'created_at', 'expired_at']
+    }).all();
+
+    const stats = {
+      total_published: allPublishedRecords.length,
+      by_type: {
+        offers: allPublishedRecords.filter(r => r.fields.request_type === 'offer').length,
+        requests: allPublishedRecords.filter(r => r.fields.request_type === 'search').length
+      }
+    };
+
+    const duration = Date.now() - startTime;
+
+    res.status(200).json({
+      success: true,
+      message: `Expiration terminée: ${successCount} annonce(s) expirée(s)`,
+      processed: expiredRecords.length,
+      expired: successCount,
+      errors: errorCount,
+      remaining_published: stats.total_published,
+      stats,
+      duration: `${duration}ms`,
+      timestamp: new Date().toISOString(),
+      details: results.filter(r => r.success).map(r => ({
+        name: r.name,
+        route: r.route
+      }))
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors du processus d\'expiration:', error);
+    
+    const duration = Date.now() - startTime;
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors du processus d\'expiration',
+      message: error.message,
+      duration: `${duration}ms`,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Création du serveur HTTP
 const server = http.createServer(app);
 
@@ -4202,6 +4325,7 @@ server.listen(PORT, host, () => {
   console.log('- POST /api/partage/add-missing-tokens (DodoPartage - Migration)');
   console.log('- POST /api/partage/create-alert (DodoPartage - Alertes)');
   console.log('- POST /api/partage/delete-alert (DodoPartage - Alertes)');
+  console.log('- POST /api/cron/expire-announcements (DodoPartage - Expiration)');
   console.log('- GET /test-email-validation (Test email)');
 });
 
