@@ -1416,7 +1416,7 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
         'created_at': new Date().toISOString(),
         'status': 'pending',
         'validation_token': crypto.randomUUID(),
-        'expired_at': new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString(), // 7 jours
+        'expires_at': new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString(), // 7 jours
         
         // Contact
         'contact_first_name': data.contact.firstName,
@@ -1992,7 +1992,7 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
         'created_at': new Date().toISOString(),
         'status': 'pending',
         'validation_token': crypto.randomUUID(),
-        'expired_at': new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString(), // 7 jours
+        'expires_at': new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString(), // 7 jours
         'request_type': 'search', // Différencier des annonces "propose"
         
         // Contact
