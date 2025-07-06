@@ -3162,9 +3162,9 @@ app.get('/api/partage/delete-form/:token', async (req, res) => {
     }
 
     // Vérifier que l'annonce existe avec ce token
-    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
     
-    const records = await base(partageTableName).select({
+    const records = await base(partageTableId).select({
       filterByFormula: `{delete_token} = '${deleteToken}'`,
       maxRecords: 1
     }).firstPage();
@@ -3222,10 +3222,10 @@ app.post('/api/partage/confirm-deletion', async (req, res) => {
       });
     }
 
-    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
     
     // Trouver l'annonce
-    const records = await base(partageTableName).select({
+    const records = await base(partageTableId).select({
       filterByFormula: `{delete_token} = '${deleteToken}'`,
       maxRecords: 1
     }).firstPage();
@@ -3241,7 +3241,7 @@ app.post('/api/partage/confirm-deletion', async (req, res) => {
     const announcement = records[0].fields;
     
     // Mettre à jour l'enregistrement avec la raison et le statut supprimé
-    await base(partageTableName).update(recordId, {
+    await base(partageTableId).update(recordId, {
       status: 'deleted',
       deletion_reason: reason,
       deleted_at: new Date().toISOString(),
@@ -3378,9 +3378,9 @@ app.get('/api/partage/edit-form/:token', async (req, res) => {
     }
 
     // Vérifier que l'annonce existe avec ce token
-    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
     
-    const records = await base(partageTableName).select({
+    const records = await base(partageTableId).select({
       filterByFormula: `{edit_token} = '${editToken}'`,
       maxRecords: 1
     }).firstPage();
@@ -3483,10 +3483,10 @@ app.post('/api/partage/update-announcement', async (req, res) => {
       });
     }
 
-    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
     
     // Trouver l'annonce pour détecter son type
-    const records = await base(partageTableName).select({
+    const records = await base(partageTableId).select({
       filterByFormula: `{edit_token} = '${editToken}'`,
       maxRecords: 1
     }).firstPage();
@@ -3633,7 +3633,7 @@ app.post('/api/partage/update-announcement', async (req, res) => {
     }
 
     // Mettre à jour l'enregistrement
-    const updatedRecord = await base(partageTableName).update(recordId, updatedFields);
+    const updatedRecord = await base(partageTableId).update(recordId, updatedFields);
 
     console.log('✅ Annonce modifiée:', {
       reference: oldData.reference,
@@ -3808,12 +3808,12 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
     }
 
     // Récupérer les détails de l'annonce depuis Airtable
-    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
-    console.log('🔍 Recherche de l\'annonce dans:', partageTableName);
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
+    console.log('🔍 Recherche de l\'annonce dans:', partageTableId);
 
     let announcementRecord = null;
     try {
-      announcementRecord = await base(partageTableName).find(announcementId);
+      announcementRecord = await base(partageTableId).find(announcementId);
       console.log('📋 Annonce trouvée:', {
         id: announcementRecord.id,
         reference: announcementRecord.fields.reference,
@@ -4212,12 +4212,12 @@ app.post('/api/partage/add-missing-tokens', async (req, res) => {
       });
     }
 
-    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
     
     console.log('🔍 Recherche des annonces sans tokens...');
     
     // Récupérer toutes les annonces publiées sans tokens
-    const records = await base(partageTableName).select({
+    const records = await base(partageTableId).select({
       filterByFormula: 'AND({status} = "published", OR(NOT({edit_token}), NOT({delete_token})))',
       maxRecords: 50
     }).firstPage();
@@ -4246,7 +4246,7 @@ app.post('/api/partage/add-missing-tokens', async (req, res) => {
       console.log(`   Delete: ${deleteToken.substring(0, 25)}...`);
       
       // Mettre à jour l'enregistrement
-      await base(partageTableName).update(record.id, {
+      await base(partageTableId).update(record.id, {
         edit_token: editToken,
         delete_token: deleteToken
       });
@@ -4680,14 +4680,14 @@ app.post('/api/cron/expire-announcements', async (req, res) => {
       });
     }
 
-    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
-    console.log('📋 Traitement d\'expiration pour la table:', partageTableName);
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
+    console.log('📋 Traitement d\'expiration pour la table:', partageTableId);
 
     // 1. Récupérer toutes les annonces publiées avec expires_at rempli ET dépassé
     console.log('🔍 Recherche des annonces expirées...');
     
     const now = new Date().toISOString();
-    const expiredRecords = await base(partageTableName).select({
+    const expiredRecords = await base(partageTableId).select({
       filterByFormula: `AND({status} = 'published', {expires_at} != '', {expires_at} <= '${now}')`,
       fields: ['id', 'status', 'request_type', 'shipping_date', 'created_at', 'expires_at', 'contact_first_name', 'departure_country', 'arrival_country']
     }).all();
@@ -4711,7 +4711,7 @@ app.post('/api/cron/expire-announcements', async (req, res) => {
     
     const updatePromises = expiredRecords.map(async (record) => {
       try {
-        await base(partageTableName).update(record.id, {
+        await base(partageTableId).update(record.id, {
           status: 'expired',
           expired_at: new Date().toISOString()
         });
@@ -4741,7 +4741,7 @@ app.post('/api/cron/expire-announcements', async (req, res) => {
     console.log(`📊 Résultat: ${successCount} succès, ${errorCount} erreurs`);
 
     // 3. Statistiques finales
-    const allPublishedRecords = await base(partageTableName).select({
+    const allPublishedRecords = await base(partageTableId).select({
       filterByFormula: `AND({status} = 'published')`,
       fields: ['id', 'request_type', 'shipping_date', 'created_at', 'expired_at']
     }).all();
@@ -4808,13 +4808,13 @@ app.post('/api/partage/update-expires-at', async (req, res) => {
       });
     }
 
-    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
     
     console.log(`🔄 Mise à jour expires_at pour ${recordId}: ${expiresAt}`);
     console.log(`📝 Raison: ${reason}`);
 
     // Mettre à jour l'enregistrement
-    await base(partageTableName).update(recordId, {
+    await base(partageTableId).update(recordId, {
       expires_at: expiresAt
     });
 
@@ -4866,7 +4866,7 @@ app.get('/api/partage/get-expiring-soon', async (req, res) => {
       });
     }
 
-    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
     
     console.log(`📅 Recherche d'annonces expirant le: ${reminderDate}`);
 
@@ -4875,7 +4875,7 @@ app.get('/api/partage/get-expiring-soon', async (req, res) => {
     const endDate = `${reminderDate}T23:59:59.999Z`;
 
     // Récupérer les annonces qui expirent à cette date
-    const expiringRecords = await base(partageTableName).select({
+    const expiringRecords = await base(partageTableId).select({
       filterByFormula: `AND(
         {status} = 'published',
         {expires_at} != '',
@@ -4944,12 +4944,12 @@ app.post('/api/partage/send-expiration-reminder', async (req, res) => {
       });
     }
 
-    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
     
     console.log(`📧 Envoi rappel ${reminderType} pour annonce: ${announcementId}`);
 
     // Récupérer les détails de l'annonce
-    const record = await base(partageTableName).find(announcementId);
+    const record = await base(partageTableId).find(announcementId);
     
     if (!record) {
       return res.status(404).json({
@@ -5131,7 +5131,7 @@ app.get('/api/partage/get-recently-expired', async (req, res) => {
       });
     }
 
-    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
     
     // Calculer la date d'il y a 24 heures
     const twentyFourHoursAgo = new Date();
@@ -5141,7 +5141,7 @@ app.get('/api/partage/get-recently-expired', async (req, res) => {
     console.log(`📅 Recherche d'annonces expirées depuis: ${cutoffDate}`);
 
     // Récupérer les annonces expirées dans les dernières 24h
-    const expiredRecords = await base(partageTableName).select({
+    const expiredRecords = await base(partageTableId).select({
       filterByFormula: `AND(
         {status} = 'expired',
         {expired_at} != '',
@@ -5207,12 +5207,12 @@ app.post('/api/partage/check-alert-matches', async (req, res) => {
       });
     }
 
-    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
     
     console.log(`🔍 Vérification des alertes pour l'annonce: ${announcementId}`);
 
     // Récupérer les détails de l'annonce
-    const record = await base(partageTableName).find(announcementId);
+    const record = await base(partageTableId).find(announcementId);
     
     if (!record) {
       return res.status(404).json({
@@ -5268,12 +5268,12 @@ app.post('/api/partage/send-post-expiration-notification', async (req, res) => {
       });
     }
 
-    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
     
     console.log(`📧 Envoi notification post-expiration pour: ${announcementId}`);
 
     // Récupérer les détails de l'annonce
-    const record = await base(partageTableName).find(announcementId);
+    const record = await base(partageTableId).find(announcementId);
     
     if (!record) {
       return res.status(404).json({
