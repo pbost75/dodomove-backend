@@ -3864,7 +3864,7 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
           'email_sent': false, // Sera mis à jour après envoi
           'email_opened': false,
           'whatsapp_clicked': false,
-          'response_method': hasWhatsApp ? 'whatsapp' : 'email', // Méthode privilégiée
+          'response_method': 'none', // Aucune réponse pour l'instant
           'contact_source': 'dodo-partage-frontend'
         }
       };
@@ -3990,9 +3990,10 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
           try {
             const contactsTableId = process.env.AIRTABLE_CONTACTS_TABLE_ID || 'tblBZrRkcc1cdTlcZ';
             await base(contactsTableId).update(contactRecordId, {
-              'email_sent': true
+              'email_sent': true,
+              'status': 'read' // Auto-progression : 'new' → 'read' quand email envoyé
             });
-            console.log('✅ Statut email_sent mis à jour pour:', contactRecordId);
+            console.log('✅ Statut email_sent et status mis à jour pour:', contactRecordId);
           } catch (updateError) {
             console.error('❌ Erreur mise à jour statut email:', updateError);
           }
