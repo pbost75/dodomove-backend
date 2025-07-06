@@ -193,6 +193,39 @@ function generateUTMUrl(baseUrl, emailType, content = 'link') {
   return `${baseUrl}${separator}${utm.toString()}`;
 }
 
+// Fonction helper pour générer une URL WhatsApp avec message pré-rempli
+function generateWhatsAppUrl(phoneNumber, requestType, announcementReference, contactName) {
+  if (!phoneNumber) return null;
+  
+  // Nettoyer le numéro de téléphone (enlever tout sauf les chiffres)
+  const cleanPhone = phoneNumber.replace(/\D/g, '');
+  
+  // Validation basique du numéro (entre 8 et 15 chiffres)
+  if (cleanPhone.length < 8 || cleanPhone.length > 15) {
+    console.warn('❌ Numéro de téléphone invalide:', phoneNumber);
+    return null;
+  }
+  
+  // Générer le message selon le type d'annonce
+  let message = '';
+  if (requestType === 'offer') {
+    message = `Bonjour ! Je vous contacte suite à votre demande concernant mon annonce de partage de conteneur ${announcementReference}. Cordialement, ${contactName}`;
+  } else if (requestType === 'search') {
+    message = `Bonjour ! Je vous contacte suite à votre message au sujet de votre recherche de place dans un conteneur ${announcementReference}. Cordialement, ${contactName}`;
+  } else {
+    message = `Bonjour ! Je vous contacte au sujet de votre annonce ${announcementReference} sur DodoPartage. Cordialement, ${contactName}`;
+  }
+  
+  // Encoder le message pour URL
+  const encodedMessage = encodeURIComponent(message);
+  
+  // Créer l'URL WhatsApp
+  const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
+  
+  console.log('📱 URL WhatsApp générée pour:', cleanPhone.substring(0, 4) + '****');
+  return whatsappUrl;
+}
+
 // ========================================
 // SYSTÈME D'ALERTES EMAIL AUTOMATIQUES
 // ========================================
@@ -1831,7 +1864,7 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
         // Utiliser le token de validation déjà stocké dans Airtable
         const validationToken = airtableData.fields.validation_token;
         const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://www.dodomove.fr/partage';
-        const validationUrl = `${frontendUrl}/api/validate-announcement?token=${validationToken}`;
+        const validationUrl = `${frontendUrl}/validating/${validationToken}`;
         
         console.log('🔑 Token de validation utilisé:', validationToken);
       
@@ -2424,7 +2457,7 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
         // Utiliser le token de validation déjà stocké dans Airtable
         const validationToken = airtableData.fields.validation_token;
         const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://www.dodomove.fr/partage';
-        const validationUrl = `${frontendUrl}/api/validate-announcement?token=${validationToken}`;
+        const validationUrl = `${frontendUrl}/validating/${validationToken}`;
         
         console.log('🔑 Token de validation utilisé:', validationToken);
       
@@ -3729,6 +3762,7 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
       announcementId,
       contactName,
       contactEmail,
+      contactPhone,
       message,
       announcementDetails,
       timestamp,
@@ -3739,6 +3773,7 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
       announcementId,
       contactName,
       contactEmail,
+      contactPhone: contactPhone ? '[FOURNI]' : '[NON FOURNI]',
       messageLength: message?.length,
       source
     });
@@ -3797,6 +3832,11 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
     const authorEmail = announcementRecord.fields.contact_email;
     const authorName = announcementRecord.fields.contact_first_name;
     const reference = announcementRecord.fields.reference;
+    const requestType = announcementRecord.fields.request_type;
+
+    // Générer l'URL WhatsApp si un numéro est fourni
+    const whatsappUrl = generateWhatsAppUrl(contactPhone, requestType, reference, contactName);
+    const hasWhatsApp = !!whatsappUrl;
 
     // Enregistrer le contact dans Airtable (table des contacts)
     let contactRecordId = null;
@@ -3812,9 +3852,17 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
           'announcement_reference': reference,
           'contact_name': contactName,
           'contact_email': contactEmail,
+          'contact_phone': contactPhone || '',
           'message': message,
           'contacted_at': new Date().toISOString(),
-          'ip_address': req.ip || 'unknown'
+          'ip_address': req.ip || 'unknown',
+          'has_whatsapp': hasWhatsApp,
+          'whatsapp_url': whatsappUrl || '',
+          'email_sent': false, // Sera mis à jour après envoi
+          'email_opened': false,
+          'whatsapp_clicked': false,
+          'response_method': 'none',
+          'contact_source': 'dodo-partage-frontend'
         }
       };
 
@@ -3880,16 +3928,32 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
                 <p style="color: #475569; margin: 0; font-size: 14px;">
                   <strong>Nom :</strong> ${contactName}<br>
                   <strong>Email :</strong> <a href="mailto:${contactEmail}" style="color: #243163;">${contactEmail}</a>
+                  ${contactPhone ? `<br><strong>Téléphone :</strong> ${contactPhone}` : ''}
                 </p>
               </div>
               
-              <!-- Bouton de réponse -->
+              <!-- Boutons de réponse -->
               <div style="text-align: center; margin: 40px 0;">
-                <a href="mailto:${contactEmail}?subject=Re: ${reference} - DodoPartage&body=Bonjour ${contactName},%0A%0AMerci pour votre message concernant mon annonce ${reference}.%0A%0A" 
-                   style="display: inline-block; background-color: #F47D6C; color: white; padding: 18px 36px; 
+                ${hasWhatsApp ? `
+                <!-- Bouton WhatsApp (prioritaire) -->
+                <a href="${whatsappUrl}" 
+                   style="display: inline-block; background-color: #25D366; color: white; padding: 18px 36px; 
                           text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; 
-                          box-shadow: 0 4px 12px rgba(244, 125, 108, 0.3);">
-                  📧 Répondre à ${contactName}
+                          box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3); margin: 0 10px 10px 0;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 8px;">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.382"/>
+                  </svg>
+                  WhatsApp ${contactName}
+                </a>
+                <br style="display: block; margin: 8px 0;">
+                ` : ''}
+                
+                <!-- Bouton Email -->
+                <a href="mailto:${contactEmail}?subject=Re: ${reference} - DodoPartage&body=Bonjour ${contactName},%0A%0AMerci pour votre message concernant mon annonce ${reference}.%0A%0A" 
+                   style="display: inline-block; background-color: ${hasWhatsApp ? '#6B7280' : '#F47D6C'}; color: white; padding: 18px 36px; 
+                          text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; 
+                          box-shadow: 0 4px 12px rgba(${hasWhatsApp ? '107, 114, 128' : '244, 125, 108'}, 0.3);">
+                  📧 Répondre par email
                 </a>
               </div>
               
@@ -3917,6 +3981,18 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
         throw new Error('Erreur lors de l\'envoi de l\'email');
       } else {
         console.log('✅ Email de contact envoyé avec succès:', emailData.id);
+        
+        // Mettre à jour le record contact pour marquer l'email comme envoyé
+        if (contactRecordId) {
+          try {
+            await base(contactsTableName).update(contactRecordId, {
+              'email_sent': true
+            });
+            console.log('✅ Statut email_sent mis à jour pour:', contactRecordId);
+          } catch (updateError) {
+            console.error('❌ Erreur mise à jour statut email:', updateError);
+          }
+        }
       }
       
     } catch (emailError) {
@@ -3935,8 +4011,11 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
       data: {
         contactId: contactRecordId,
         emailSent: true,
+        hasWhatsApp,
+        whatsappUrl: hasWhatsApp ? whatsappUrl : null,
         contactName,
         contactEmail,
+        contactPhone: contactPhone || null,
         announcementId,
         announcementReference: reference,
         authorName,
@@ -3978,7 +4057,7 @@ app.get('/test-email-validation', async (req, res) => {
     
     const testValidationToken = 'test-token-' + Date.now();
     const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://www.dodomove.fr/partage';
-    const validationUrl = `${frontendUrl}/api/validate-announcement?token=${testValidationToken}`;
+    const validationUrl = `${frontendUrl}/validating/${testValidationToken}`;
     
     console.log('📧 Envoi de l\'email de test...');
     
