@@ -3850,8 +3850,8 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
         fields: {
           'announcement_id': announcementId,
           'created_at': new Date().toISOString(),
-          'ad_type': requestType === 'search' ? 'cherche' : 'propose', // Type d'annonce
-          'status': 'new', // Statut initial
+          'ad_type': requestType === 'search' ? 'search' : 'offer', // Type d'annonce
+          'status': 'new', // Statut initial ('new' → 'read' → 'replied')
           'requester_name': contactName,
           'requester_email': contactEmail,
           'requester_phone': contactPhone || '',
@@ -3864,7 +3864,7 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
           'email_sent': false, // Sera mis à jour après envoi
           'email_opened': false,
           'whatsapp_clicked': false,
-          'response_method': 'none',
+          'response_method': hasWhatsApp ? 'whatsapp' : 'email', // Méthode privilégiée
           'contact_source': 'dodo-partage-frontend'
         }
       };
