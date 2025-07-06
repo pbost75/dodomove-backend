@@ -234,13 +234,14 @@ function generateWhatsAppUrl(phoneNumber, requestType, announcementData, contact
   }
   
   // Générer le message selon le type d'annonce
+  // Note: le message va DE l'auteur de l'annonce VERS la personne qui contacte
   let message = '';
   if (requestType === 'offer') {
-    message = `Bonjour ${authorName}, je vous contacte suite à votre annonce de partage de conteneur pour ${destination}${dateInfo}. Cordialement, ${contactName}`;
+    message = `Bonjour ${contactName}, je vous contacte suite à votre message concernant mon annonce de partage de conteneur pour ${destination}${dateInfo}. Cordialement, ${authorName}`;
   } else if (requestType === 'search') {
-    message = `Bonjour ${authorName}, je vous contacte suite à votre recherche de place dans un conteneur pour ${destination}. Cordialement, ${contactName}`;
+    message = `Bonjour ${contactName}, je vous contacte suite à votre message au sujet de ma recherche de place dans un conteneur pour ${destination}. Cordialement, ${authorName}`;
   } else {
-    message = `Bonjour ${authorName}, je vous contacte au sujet de votre annonce sur DodoPartage pour ${destination}. Cordialement, ${contactName}`;
+    message = `Bonjour ${contactName}, je vous contacte suite à votre message concernant mon annonce sur DodoPartage pour ${destination}. Cordialement, ${authorName}`;
   }
   
   // Encoder le message pour URL
