@@ -3843,8 +3843,8 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
     try {
       console.log('💾 Enregistrement du contact dans Airtable...');
       
-      // Utiliser la table des logs de contact (nom exact d'Airtable)
-      const contactsTableName = process.env.AIRTABLE_CONTACTS_TABLE_NAME || 'DodoPartage Contact Logs';
+      // Utiliser l'ID de table (plus robuste que le nom)
+      const contactsTableId = process.env.AIRTABLE_CONTACTS_TABLE_ID || 'tblBZrRkcc1cdTlcZ';
       
       const contactData = {
         fields: {
@@ -3866,7 +3866,7 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
         }
       };
 
-      const contactRecords = await base(contactsTableName).create([contactData]);
+      const contactRecords = await base(contactsTableId).create([contactData]);
       contactRecordId = contactRecords[0].id;
       
       console.log('✅ Contact enregistré:', contactRecordId);
@@ -3985,8 +3985,8 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
         // Mettre à jour le record contact pour marquer l'email comme envoyé
         if (contactRecordId) {
           try {
-            const contactsTableName = process.env.AIRTABLE_CONTACTS_TABLE_NAME || 'DodoPartage Contact Logs';
-            await base(contactsTableName).update(contactRecordId, {
+            const contactsTableId = process.env.AIRTABLE_CONTACTS_TABLE_ID || 'tblBZrRkcc1cdTlcZ';
+            await base(contactsTableId).update(contactRecordId, {
               'email_sent': true
             });
             console.log('✅ Statut email_sent mis à jour pour:', contactRecordId);
