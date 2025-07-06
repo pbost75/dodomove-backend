@@ -1744,8 +1744,8 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
 
     // Protection contre les doublons : vérifier si une annonce similaire existe déjà
     try {
-      const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
-      const recentRecords = await base(partageTableName).select({
+      const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
+      const recentRecords = await base(partageTableId).select({
         filterByFormula: `AND({contact_email} = '${data.contact.email}', DATETIME_DIFF(NOW(), {created_at}, 'minutes') < 2)`,
         maxRecords: 1
       }).firstPage();
@@ -1831,10 +1831,10 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
       console.log('🔍 Type d\'offre:', data.offerType);
       
       // Utiliser la table DodoPartage (cohérente avec les autres tables)
-      const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
-      console.log('📋 Table Airtable utilisée:', partageTableName);
+      const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
+      console.log('📋 Table Airtable utilisée:', partageTableId);
       
-      const records = await base(partageTableName).create([airtableData]);
+      const records = await base(partageTableId).create([airtableData]);
       airtableRecordId = records[0].id;
       airtableSuccess = true;
       
@@ -2059,8 +2059,8 @@ app.get('/api/partage/test', async (req, res) => {
     let airtableTest = { success: false, message: 'Non configuré' };
     if (hasAirtableConfig) {
              try {
-         const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
-         await base(partageTableName).select({ maxRecords: 1 }).firstPage();
+         const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
+         await base(partageTableId).select({ maxRecords: 1 }).firstPage();
         airtableTest = { success: true, message: 'Connexion réussie' };
       } catch (error) {
         airtableTest = { success: false, message: error.message };
@@ -2300,8 +2300,8 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
 
     // Protection contre les doublons : vérifier si une demande similaire existe déjà
     try {
-      const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
-      const recentRecords = await base(partageTableName).select({
+      const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
+      const recentRecords = await base(partageTableId).select({
         filterByFormula: `AND({contact_email} = '${data.contact.email}', {request_type} = 'search', DATETIME_DIFF(NOW(), {created_at}, 'minutes') < 2)`,
         maxRecords: 1
       }).firstPage();
@@ -2431,10 +2431,10 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
       console.log('📤 Envoi demande vers Airtable...');
       
       // Utiliser la même table que les annonces mais avec request_type = 'search'
-      const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
-      console.log('📋 Table Airtable utilisée:', partageTableName);
+      const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
+      console.log('📋 Table Airtable utilisée:', partageTableId);
       
-      const records = await base(partageTableName).create([airtableData]);
+      const records = await base(partageTableId).create([airtableData]);
       airtableRecordId = records[0].id;
       airtableSuccess = true;
       
@@ -2652,11 +2652,11 @@ app.get('/api/partage/validate-announcement', async (req, res) => {
     }
 
     // Nom de la table DodoPartage
-    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
-    console.log('🔍 Recherche du token dans la table:', partageTableName);
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
+    console.log('🔍 Recherche du token dans la table:', partageTableId);
 
     // Rechercher l'annonce avec ce token de validation
-    const records = await base(partageTableName).select({
+    const records = await base(partageTableId).select({
       filterByFormula: `{validation_token} = '${token}'`,
       maxRecords: 1
     }).firstPage();
@@ -2697,7 +2697,7 @@ app.get('/api/partage/validate-announcement', async (req, res) => {
     // Mettre à jour le statut de l'annonce
     console.log('🔄 Mise à jour du statut vers "published"...');
     
-    const updatedRecord = await base(partageTableName).update(record.id, {
+    const updatedRecord = await base(partageTableId).update(record.id, {
       status: 'published',
       validated_at: new Date().toISOString(),
       validation_token: '' // Supprimer le token après utilisation
@@ -2714,7 +2714,7 @@ app.get('/api/partage/validate-announcement', async (req, res) => {
     const deleteToken = 'del_' + Date.now() + '_' + Math.random().toString(36).substr(2, 15);
     
     // Mettre à jour avec les tokens de gestion
-    await base(partageTableName).update(record.id, {
+    await base(partageTableId).update(record.id, {
       edit_token: editToken,
       delete_token: deleteToken
     });
@@ -2922,8 +2922,8 @@ app.get('/api/partage/get-announcements', async (req, res) => {
     }
 
     // Nom de la table DodoPartage
-    const partageTableName = process.env.AIRTABLE_PARTAGE_TABLE_NAME || 'DodoPartage - Announcement';
-    console.log('📋 Récupération depuis la table:', partageTableName);
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
+    console.log('📋 Récupération depuis la table:', partageTableId);
 
     // Construction des filtres Airtable
     let filterFormula = '';
@@ -2966,7 +2966,7 @@ app.get('/api/partage/get-announcements', async (req, res) => {
       selectOptions.filterByFormula = filterFormula;
     }
 
-    const records = await base(partageTableName).select(selectOptions).all();
+    const records = await base(partageTableId).select(selectOptions).all();
     
     console.log(`📊 ${records.length} enregistrement(s) récupéré(s) depuis Airtable`);
 
@@ -3123,7 +3123,7 @@ app.get('/api/partage/get-announcements', async (req, res) => {
       },
       backend: {
         source: 'airtable',
-        table: partageTableName,
+        table: partageTableId,
         timestamp: new Date().toISOString()
       }
     });
