@@ -3849,13 +3849,16 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
       const contactData = {
         fields: {
           'announcement_id': announcementId,
-          'announcement_reference': reference,
-          'contact_name': contactName,
-          'contact_email': contactEmail,
-          'contact_phone': contactPhone || '',
-          'message': message,
-          'contacted_at': new Date().toISOString(),
-          'ip_address': req.ip || 'unknown',
+          'created_at': new Date().toISOString(),
+          'ad_type': requestType === 'search' ? 'cherche' : 'propose', // Type d'annonce
+          'status': 'new', // Statut initial
+          'requester_name': contactName,
+          'requester_email': contactEmail,
+          'requester_phone': contactPhone || '',
+          'requester_message': message,
+          'requested_volume': 0, // Volume par défaut (à ajuster si disponible)
+          'forwarded_to_owner': true, // Email envoyé au propriétaire
+          'forwarded_at': new Date().toISOString(),
           'has_whatsapp': hasWhatsApp,
           'whatsapp_url': whatsappUrl || '',
           'email_sent': false, // Sera mis à jour après envoi
