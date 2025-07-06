@@ -3938,8 +3938,8 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
               <!-- Boutons de réponse -->
               <div style="text-align: center; margin: 40px 0;">
                 ${hasWhatsApp ? `
-                <!-- Bouton WhatsApp (prioritaire) -->
-                <a href="${whatsappUrl}" 
+                <!-- Bouton WhatsApp (prioritaire avec tracking) -->
+                <a href="${process.env.BACKEND_URL || 'https://dodomove-backend-production.up.railway.app'}/api/partage/track-whatsapp-click/${contactRecordId}?whatsappUrl=${encodeURIComponent(whatsappUrl)}" 
                    style="display: inline-block; background-color: #25D366; color: white; padding: 18px 36px; 
                           text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; 
                           box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3); margin: 0 10px 10px 0;">
@@ -5447,6 +5447,284 @@ app.post('/api/partage/send-post-expiration-notification', async (req, res) => {
   }
 });
 
+// ===================================
+// 📊 ROUTES DE TRACKING CONTACT LOGS  
+// ===================================
+
+// Route pour tracker l'ouverture d'email (pixel de tracking)
+app.get('/api/partage/track-email-open/:contactId', async (req, res) => {
+  console.log('GET /api/partage/track-email-open appelé pour:', req.params.contactId);
+  
+  try {
+    const { contactId } = req.params;
+    
+    if (!contactId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Contact ID requis'
+      });
+    }
+
+    // Vérifier les variables d'environnement
+    if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
+      return res.status(500).json({
+        success: false,
+        error: 'Configuration Airtable manquante'
+      });
+    }
+
+    const contactsTableId = process.env.AIRTABLE_CONTACTS_TABLE_ID || 'tblBZrRkcc1cdTlcZ';
+    
+    console.log(`📧 Marquage email ouvert pour contact: ${contactId}`);
+
+    // Mettre à jour le statut du contact
+    await base(contactsTableId).update(contactId, {
+      'status': 'read',
+      'email_opened': true
+    });
+
+    console.log(`✅ Email marqué comme ouvert pour: ${contactId}`);
+
+    // Retourner un pixel transparent 1x1
+    res.set({
+      'Content-Type': 'image/png',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+
+    // Pixel transparent 1x1 PNG en base64
+    const pixel = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      'base64'
+    );
+    
+    res.send(pixel);
+
+  } catch (error) {
+    console.error('❌ Erreur lors du tracking d\'ouverture email:', error);
+    
+    // Même en cas d'erreur, on retourne un pixel pour ne pas casser l'email
+    res.set({
+      'Content-Type': 'image/png',
+      'Cache-Control': 'no-cache, no-store, must-revalidate'
+    });
+    
+    const pixel = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      'base64'
+    );
+    
+    res.send(pixel);
+  }
+});
+
+// Route pour tracker le clic sur WhatsApp
+app.get('/api/partage/track-whatsapp-click/:contactId', async (req, res) => {
+  console.log('GET /api/partage/track-whatsapp-click appelé pour:', req.params.contactId);
+  
+  try {
+    const { contactId } = req.params;
+    const { whatsappUrl } = req.query;
+    
+    if (!contactId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Contact ID requis'
+      });
+    }
+
+    if (!whatsappUrl) {
+      return res.status(400).json({
+        success: false,
+        error: 'URL WhatsApp requise'
+      });
+    }
+
+    // Vérifier les variables d'environnement
+    if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
+      return res.status(500).json({
+        success: false,
+        error: 'Configuration Airtable manquante'
+      });
+    }
+
+    const contactsTableId = process.env.AIRTABLE_CONTACTS_TABLE_ID || 'tblBZrRkcc1cdTlcZ';
+    
+    console.log(`📱 Marquage clic WhatsApp pour contact: ${contactId}`);
+
+    // Mettre à jour le statut du contact
+    await base(contactsTableId).update(contactId, {
+      'whatsapp_clicked': true,
+      'response_method': 'whatsapp' // L'utilisateur a privilégié WhatsApp
+    });
+
+    console.log(`✅ Clic WhatsApp tracké pour: ${contactId}`);
+
+    // Rediriger vers WhatsApp
+    res.redirect(decodeURIComponent(whatsappUrl));
+
+  } catch (error) {
+    console.error('❌ Erreur lors du tracking de clic WhatsApp:', error);
+    
+    // En cas d'erreur, rediriger quand même vers WhatsApp
+    if (req.query.whatsappUrl) {
+      res.redirect(decodeURIComponent(req.query.whatsappUrl));
+    } else {
+      res.status(500).json({
+        success: false,
+        error: 'Erreur lors du tracking WhatsApp',
+        details: error.message
+      });
+    }
+  }
+});
+
+// Route pour marquer un contact comme ayant reçu une réponse
+app.post('/api/partage/mark-replied/:contactId', async (req, res) => {
+  console.log('POST /api/partage/mark-replied appelé pour:', req.params.contactId);
+  
+  try {
+    const { contactId } = req.params;
+    const { responseMethod } = req.body;
+    
+    if (!contactId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Contact ID requis'
+      });
+    }
+
+    // Valider la méthode de réponse
+    const validMethods = ['email', 'whatsapp', 'none'];
+    if (responseMethod && !validMethods.includes(responseMethod)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Méthode de réponse invalide. Doit être: email, whatsapp, none'
+      });
+    }
+
+    // Vérifier les variables d'environnement
+    if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
+      return res.status(500).json({
+        success: false,
+        error: 'Configuration Airtable manquante'
+      });
+    }
+
+    const contactsTableId = process.env.AIRTABLE_CONTACTS_TABLE_ID || 'tblBZrRkcc1cdTlcZ';
+    
+    console.log(`💬 Marquage réponse pour contact: ${contactId}`);
+
+    // Préparer les données de mise à jour
+    const updateData = {
+      'status': 'replied'
+    };
+
+    // Ajouter la méthode de réponse si fournie
+    if (responseMethod) {
+      updateData['response_method'] = responseMethod;
+    }
+
+    // Mettre à jour le statut du contact
+    const updatedRecord = await base(contactsTableId).update(contactId, updateData);
+
+    console.log(`✅ Contact marqué comme ayant reçu une réponse: ${contactId}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Contact marqué comme ayant reçu une réponse',
+      data: {
+        contactId,
+        status: 'replied',
+        responseMethod: responseMethod || null,
+        updatedAt: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors du marquage de réponse:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors du marquage de réponse',
+      details: error.message
+    });
+  }
+});
+
+// Route pour obtenir les statistiques de tracking d'un contact
+app.get('/api/partage/contact-stats/:contactId', async (req, res) => {
+  console.log('GET /api/partage/contact-stats appelé pour:', req.params.contactId);
+  
+  try {
+    const { contactId } = req.params;
+    
+    if (!contactId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Contact ID requis'
+      });
+    }
+
+    // Vérifier les variables d'environnement
+    if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
+      return res.status(500).json({
+        success: false,
+        error: 'Configuration Airtable manquante'
+      });
+    }
+
+    const contactsTableId = process.env.AIRTABLE_CONTACTS_TABLE_ID || 'tblBZrRkcc1cdTlcZ';
+    
+    console.log(`📊 Récupération stats pour contact: ${contactId}`);
+
+    // Récupérer les données du contact
+    const record = await base(contactsTableId).find(contactId);
+    
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        error: 'Contact introuvable'
+      });
+    }
+
+    const fields = record.fields;
+    
+    // Formater les statistiques
+    const stats = {
+      contactId,
+      status: fields.status || 'new',
+      emailSent: fields.email_sent || false,
+      emailOpened: fields.email_opened || false,
+      hasWhatsApp: fields.has_whatsapp || false,
+      whatsappClicked: fields.whatsapp_clicked || false,
+      responseMethod: fields.response_method || 'none',
+      contactSource: fields.contact_source || 'unknown',
+      createdAt: fields.created_at,
+      forwardedAt: fields.forwarded_at,
+      requesterName: fields.requester_name,
+      requesterEmail: fields.requester_email,
+      requesterPhone: fields.requester_phone || null
+    };
+
+    console.log(`✅ Stats récupérées pour: ${contactId}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Statistiques du contact récupérées',
+      data: stats
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération des stats:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la récupération des statistiques',
+      details: error.message
+    });
+  }
+});
+
 // Création du serveur HTTP
 const server = http.createServer(app);
 
@@ -5483,6 +5761,10 @@ server.listen(PORT, host, () => {
   console.log('- POST /api/partage/send-post-expiration-notification (DodoPartage - Notifications)');
   console.log('- POST /api/partage/check-alert-matches (DodoPartage - Alertes Automatiques)');
   console.log('- GET /test-email-validation (Test email)');
+  console.log('- GET /api/partage/track-email-open/:contactId (Tracking - Email ouvert)');
+  console.log('- GET /api/partage/track-whatsapp-click/:contactId (Tracking - Clic WhatsApp)');
+  console.log('- POST /api/partage/mark-replied/:contactId (Tracking - Marquer répondu)');
+  console.log('- GET /api/partage/contact-stats/:contactId (Tracking - Statistiques contact)');
 });
 
 // Gestion des erreurs
