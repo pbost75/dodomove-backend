@@ -3966,7 +3966,7 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
               <div style="text-align: center; margin: 40px 0;">
                 ${hasWhatsApp ? `
                 <!-- Bouton WhatsApp (prioritaire avec tracking automatique) -->
-                <a href="${process.env.BACKEND_URL || 'https://dodomove-backend-production.up.railway.app'}/api/partage/track-owner-whatsapp/${contactRecordId}?whatsappUrl=${encodeURIComponent(whatsappUrl)}" 
+                <a href="${process.env.BACKEND_URL || 'https://web-production-7b738.up.railway.app'}/api/partage/track-owner-whatsapp/${contactRecordId}?whatsappUrl=${encodeURIComponent(whatsappUrl)}" 
                    style="display: inline-block; background-color: #25D366; color: white; padding: 16px 32px; 
                           text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; 
                           box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3); margin: 0 8px 10px 0; min-width: 180px; text-align: center;">
@@ -3979,7 +3979,7 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
                 ` : ''}
                 
                 <!-- Bouton Email (avec tracking automatique) -->
-                <a href="${process.env.BACKEND_URL || 'https://dodomove-backend-production.up.railway.app'}/api/partage/track-owner-email/${contactRecordId}?emailUrl=${encodeURIComponent(`mailto:${contactEmail}?subject=Re: ${reference} - DodoPartage&body=Bonjour ${contactName},%0A%0AMerci pour votre message concernant mon annonce ${reference}.%0A%0A`)}" 
+                <a href="${process.env.BACKEND_URL || 'https://web-production-7b738.up.railway.app'}/api/partage/track-owner-email/${contactRecordId}?emailUrl=${encodeURIComponent(`mailto:${contactEmail}?subject=Re: ${reference} - DodoPartage&body=Bonjour ${contactName},%0A%0AMerci pour votre message concernant mon annonce ${reference}.%0A%0A`)}" 
                    style="display: inline-block; background-color: #F17A69; color: white; padding: 16px 32px; 
                           text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; 
                           box-shadow: 0 4px 12px rgba(241, 122, 105, 0.3); margin: 0 8px 10px 0; min-width: 180px; text-align: center;">
