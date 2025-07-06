@@ -194,7 +194,7 @@ function generateUTMUrl(baseUrl, emailType, content = 'link') {
 }
 
 // Fonction helper pour générer une URL WhatsApp avec message pré-rempli
-function generateWhatsAppUrl(phoneNumber, requestType, announcementReference, contactName) {
+function generateWhatsAppUrl(phoneNumber, requestType, announcementData, contactName) {
   if (!phoneNumber) return null;
   
   // Nettoyer le numéro de téléphone (enlever tout sauf les chiffres)
@@ -206,14 +206,41 @@ function generateWhatsAppUrl(phoneNumber, requestType, announcementReference, co
     return null;
   }
   
+  // Extraire les informations de l'annonce
+  const authorName = announcementData.contact_first_name || 'Bonjour';
+  const arrivalCity = announcementData.arrival_city || '';
+  const arrivalCountry = announcementData.arrival_country || '';
+  const shippingDate = announcementData.shipping_date || '';
+  
+  // Construire la destination
+  let destination = arrivalCountry;
+  if (arrivalCity && arrivalCity !== arrivalCountry) {
+    destination = `${arrivalCity} (${arrivalCountry})`;
+  }
+  
+  // Construire la date si disponible (seulement pour les offres)
+  let dateInfo = '';
+  if (requestType === 'offer' && shippingDate) {
+    try {
+      const date = new Date(shippingDate);
+      dateInfo = ` le ${date.toLocaleDateString('fr-FR', { 
+        day: 'numeric', 
+        month: 'long', 
+        year: 'numeric' 
+      })}`;
+    } catch (e) {
+      console.warn('❌ Erreur parsing date:', shippingDate);
+    }
+  }
+  
   // Générer le message selon le type d'annonce
   let message = '';
   if (requestType === 'offer') {
-    message = `Bonjour ! Je vous contacte suite à votre demande concernant mon annonce de partage de conteneur ${announcementReference}. Cordialement, ${contactName}`;
+    message = `Bonjour ${authorName}, je vous contacte suite à votre annonce de partage de conteneur pour ${destination}${dateInfo}. Cordialement, ${contactName}`;
   } else if (requestType === 'search') {
-    message = `Bonjour ! Je vous contacte suite à votre message au sujet de votre recherche de place dans un conteneur ${announcementReference}. Cordialement, ${contactName}`;
+    message = `Bonjour ${authorName}, je vous contacte suite à votre recherche de place dans un conteneur pour ${destination}. Cordialement, ${contactName}`;
   } else {
-    message = `Bonjour ! Je vous contacte au sujet de votre annonce ${announcementReference} sur DodoPartage. Cordialement, ${contactName}`;
+    message = `Bonjour ${authorName}, je vous contacte au sujet de votre annonce sur DodoPartage pour ${destination}. Cordialement, ${contactName}`;
   }
   
   // Encoder le message pour URL
@@ -3835,7 +3862,7 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
     const requestType = announcementRecord.fields.request_type;
 
     // Générer l'URL WhatsApp si un numéro est fourni
-    const whatsappUrl = generateWhatsAppUrl(contactPhone, requestType, reference, contactName);
+    const whatsappUrl = generateWhatsAppUrl(contactPhone, requestType, announcementRecord.fields, contactName);
     const hasWhatsApp = !!whatsappUrl;
 
     // Enregistrer le contact dans Airtable (table des contacts)
@@ -3938,11 +3965,11 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
               <!-- Boutons de réponse -->
               <div style="text-align: center; margin: 40px 0;">
                 ${hasWhatsApp ? `
-                <!-- Bouton WhatsApp (prioritaire avec tracking) -->
-                <a href="${process.env.BACKEND_URL || 'https://dodomove-backend-production.up.railway.app'}/api/partage/track-whatsapp-click/${contactRecordId}?whatsappUrl=${encodeURIComponent(whatsappUrl)}" 
-                   style="display: inline-block; background-color: #25D366; color: white; padding: 18px 36px; 
+                <!-- Bouton WhatsApp (prioritaire avec tracking automatique) -->
+                <a href="${process.env.BACKEND_URL || 'https://dodomove-backend-production.up.railway.app'}/api/partage/track-owner-whatsapp/${contactRecordId}?whatsappUrl=${encodeURIComponent(whatsappUrl)}" 
+                   style="display: inline-block; background-color: #25D366; color: white; padding: 16px 32px; 
                           text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; 
-                          box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3); margin: 0 10px 10px 0;">
+                          box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3); margin: 0 8px 10px 0; min-width: 180px; text-align: center;">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 8px;">
                     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.382"/>
                   </svg>
@@ -3951,13 +3978,13 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
                 <br style="display: block; margin: 8px 0;">
                 ` : ''}
                 
-                <!-- Bouton Email -->
-                                 <a href="mailto:${contactEmail}?subject=Re: ${reference} - DodoPartage&body=Bonjour ${contactName},%0A%0AMerci pour votre message concernant mon annonce ${reference}.%0A%0A" 
-                   style="display: inline-block; background-color: #F17A69; color: white; padding: 18px 36px; 
+                <!-- Bouton Email (avec tracking automatique) -->
+                <a href="${process.env.BACKEND_URL || 'https://dodomove-backend-production.up.railway.app'}/api/partage/track-owner-email/${contactRecordId}?emailUrl=${encodeURIComponent(`mailto:${contactEmail}?subject=Re: ${reference} - DodoPartage&body=Bonjour ${contactName},%0A%0AMerci pour votre message concernant mon annonce ${reference}.%0A%0A`)}" 
+                   style="display: inline-block; background-color: #F17A69; color: white; padding: 16px 32px; 
                           text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; 
-                          box-shadow: 0 4px 12px rgba(241, 122, 105, 0.3);">
+                          box-shadow: 0 4px 12px rgba(241, 122, 105, 0.3); margin: 0 8px 10px 0; min-width: 180px; text-align: center;">
                    📧 Répondre par email
-                 </a>
+                </a>
               </div>
               
               <p style="color: #64748b; font-size: 14px; text-align: center; margin: 30px 0 0 0;">
@@ -5650,6 +5677,108 @@ app.post('/api/partage/mark-replied/:contactId', async (req, res) => {
       error: 'Erreur lors du marquage de réponse',
       details: error.message
     });
+  }
+});
+
+// Route de tracking pour les actions du propriétaire (WhatsApp)
+app.get('/api/partage/track-owner-whatsapp/:contactId', async (req, res) => {
+  console.log('GET /api/partage/track-owner-whatsapp appelé');
+  
+  try {
+    const { contactId } = req.params;
+    const { whatsappUrl } = req.query;
+    
+    if (!contactId || !whatsappUrl) {
+      return res.status(400).json({
+        success: false,
+        error: 'contactId et whatsappUrl requis'
+      });
+    }
+    
+    console.log('📱 Tracking action proprietaire WhatsApp pour contact:', contactId);
+    
+    // Mettre à jour le contact dans Airtable (tracking automatique)
+    try {
+      const contactsTableId = process.env.AIRTABLE_CONTACTS_TABLE_ID || 'tblBZrRkcc1cdTlcZ';
+      
+      await base(contactsTableId).update(contactId, {
+        'response_method': 'whatsapp', // Auto-tracking: propriétaire utilise WhatsApp
+        'status': 'replied' // Auto-progression vers "replied"
+      });
+      
+      console.log('✅ Action propriétaire WhatsApp trackée avec auto-progression');
+      
+    } catch (airtableError) {
+      console.error('❌ Erreur tracking action proprietaire WhatsApp:', airtableError);
+      // Continue pour ne pas bloquer la redirection
+    }
+    
+    // Rediriger vers WhatsApp
+    res.redirect(decodeURIComponent(whatsappUrl));
+    
+  } catch (error) {
+    console.error('❌ Erreur lors du tracking action proprietaire WhatsApp:', error);
+    // En cas d'erreur, rediriger quand même
+    const { whatsappUrl } = req.query;
+    if (whatsappUrl) {
+      res.redirect(decodeURIComponent(whatsappUrl));
+    } else {
+      res.status(500).json({
+        success: false,
+        error: 'Erreur lors du tracking'
+      });
+    }
+  }
+});
+
+// Route de tracking pour les actions du propriétaire (Email)
+app.get('/api/partage/track-owner-email/:contactId', async (req, res) => {
+  console.log('GET /api/partage/track-owner-email appelé');
+  
+  try {
+    const { contactId } = req.params;
+    const { emailUrl } = req.query;
+    
+    if (!contactId || !emailUrl) {
+      return res.status(400).json({
+        success: false,
+        error: 'contactId et emailUrl requis'
+      });
+    }
+    
+    console.log('📧 Tracking action proprietaire Email pour contact:', contactId);
+    
+    // Mettre à jour le contact dans Airtable (tracking automatique)
+    try {
+      const contactsTableId = process.env.AIRTABLE_CONTACTS_TABLE_ID || 'tblBZrRkcc1cdTlcZ';
+      
+      await base(contactsTableId).update(contactId, {
+        'response_method': 'email', // Auto-tracking: propriétaire utilise email
+        'status': 'replied' // Auto-progression vers "replied"
+      });
+      
+      console.log('✅ Action propriétaire Email trackée avec auto-progression');
+      
+    } catch (airtableError) {
+      console.error('❌ Erreur tracking action proprietaire Email:', airtableError);
+      // Continue pour ne pas bloquer la redirection
+    }
+    
+    // Rediriger vers l'email
+    res.redirect(decodeURIComponent(emailUrl));
+    
+  } catch (error) {
+    console.error('❌ Erreur lors du tracking action proprietaire Email:', error);
+    // En cas d'erreur, rediriger quand même
+    const { emailUrl } = req.query;
+    if (emailUrl) {
+      res.redirect(decodeURIComponent(emailUrl));
+    } else {
+      res.status(500).json({
+        success: false,
+        error: 'Erreur lors du tracking'
+      });
+    }
   }
 });
 
