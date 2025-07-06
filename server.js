@@ -193,19 +193,8 @@ function generateUTMUrl(baseUrl, emailType, content = 'link') {
   return `${baseUrl}${separator}${utm.toString()}`;
 }
 
-// Fonction helper pour générer une URL WhatsApp avec message pré-rempli
-function generateWhatsAppUrl(phoneNumber, requestType, announcementData, contactName) {
-  if (!phoneNumber) return null;
-  
-  // Nettoyer le numéro de téléphone (enlever tout sauf les chiffres)
-  const cleanPhone = phoneNumber.replace(/\D/g, '');
-  
-  // Validation basique du numéro (entre 8 et 15 chiffres)
-  if (cleanPhone.length < 8 || cleanPhone.length > 15) {
-    console.warn('❌ Numéro de téléphone invalide:', phoneNumber);
-    return null;
-  }
-  
+// Fonction helper pour générer un message personnalisé (WhatsApp ou Email)
+function generatePersonalizedMessage(requestType, announcementData, contactName) {
   // Extraire les informations de l'annonce
   const authorName = announcementData.contact_first_name || 'Bonjour';
   const arrivalCity = announcementData.arrival_city || '';
@@ -244,6 +233,25 @@ function generateWhatsAppUrl(phoneNumber, requestType, announcementData, contact
     message = `Bonjour ${contactName}, je vous contacte suite à votre message concernant mon annonce sur DodoPartage pour ${destination}. Cordialement, ${authorName}`;
   }
   
+  return message;
+}
+
+// Fonction helper pour générer une URL WhatsApp avec message pré-rempli
+function generateWhatsAppUrl(phoneNumber, requestType, announcementData, contactName) {
+  if (!phoneNumber) return null;
+  
+  // Nettoyer le numéro de téléphone (enlever tout sauf les chiffres)
+  const cleanPhone = phoneNumber.replace(/\D/g, '');
+  
+  // Validation basique du numéro (entre 8 et 15 chiffres)
+  if (cleanPhone.length < 8 || cleanPhone.length > 15) {
+    console.warn('❌ Numéro de téléphone invalide:', phoneNumber);
+    return null;
+  }
+  
+  // Générer le message personnalisé
+  const message = generatePersonalizedMessage(requestType, announcementData, contactName);
+  
   // Encoder le message pour URL
   const encodedMessage = encodeURIComponent(message);
   
@@ -252,6 +260,23 @@ function generateWhatsAppUrl(phoneNumber, requestType, announcementData, contact
   
   console.log('📱 URL WhatsApp générée pour:', cleanPhone.substring(0, 4) + '****');
   return whatsappUrl;
+}
+
+// Fonction helper pour générer une URL Email avec message pré-rempli
+function generateEmailUrl(contactEmail, requestType, announcementData, contactName, reference) {
+  if (!contactEmail) return null;
+  
+  // Générer le message personnalisé (même que WhatsApp)
+  const message = generatePersonalizedMessage(requestType, announcementData, contactName);
+  
+  // Encoder le message pour URL (remplacer les sauts de ligne par %0A)
+  const encodedMessage = encodeURIComponent(message.replace(/\n/g, '\n'));
+  
+  // Créer l'URL Email avec sujet et corps personnalisés
+  const emailUrl = `mailto:${contactEmail}?subject=Re: ${reference} - DodoPartage&body=${encodedMessage}`;
+  
+  console.log('📧 URL Email générée pour:', contactEmail);
+  return emailUrl;
 }
 
 // ========================================
@@ -3866,6 +3891,9 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
     const whatsappUrl = generateWhatsAppUrl(contactPhone, requestType, announcementRecord.fields, contactName);
     const hasWhatsApp = !!whatsappUrl;
 
+    // Générer l'URL Email avec le même message personnalisé que WhatsApp
+    const emailUrl = generateEmailUrl(contactEmail, requestType, announcementRecord.fields, contactName, reference);
+
     // Enregistrer le contact dans Airtable (table des contacts)
     let contactRecordId = null;
     try {
@@ -3979,8 +4007,8 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
                 <br style="display: block; margin: 8px 0;">
                 ` : ''}
                 
-                <!-- Bouton Email (avec tracking automatique) -->
-                <a href="${process.env.BACKEND_URL || 'https://web-production-7b738.up.railway.app'}/api/partage/track-owner-email/${contactRecordId}?emailUrl=${encodeURIComponent(`mailto:${contactEmail}?subject=Re: ${reference} - DodoPartage&body=Bonjour ${contactName},%0A%0AMerci pour votre message concernant mon annonce ${reference}.%0A%0A`)}" 
+                <!-- Bouton Email (avec tracking automatique et message personnalisé) -->
+                <a href="${process.env.BACKEND_URL || 'https://web-production-7b738.up.railway.app'}/api/partage/track-owner-email/${contactRecordId}?emailUrl=${encodeURIComponent(emailUrl)}" 
                    style="display: inline-block; background-color: #F17A69; color: white; padding: 16px 32px; 
                           text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; 
                           box-shadow: 0 4px 12px rgba(241, 122, 105, 0.3); margin: 0 8px 10px 0; min-width: 180px; text-align: center;">
