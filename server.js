@@ -4571,7 +4571,7 @@ app.post('/api/partage/delete-alert', async (req, res) => {
   console.log('Body reçu:', req.body);
   
   try {
-    const { token, reason } = req.body;
+    const { token, reason, customReason } = req.body;
 
     // Validation des données requises
     if (!token) {
@@ -4579,6 +4579,16 @@ app.post('/api/partage/delete-alert', async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'Token de suppression manquant'
+      });
+    }
+
+    // Validation de la raison
+    const validReasons = ['found_solution', 'plans_changed', 'other', 'too_many_emails', 'not_relevant'];
+    if (reason && !validReasons.includes(reason)) {
+      console.error('❌ Raison invalide:', reason);
+      return res.status(400).json({
+        success: false,
+        error: 'Raison de suppression invalide'
       });
     }
 
@@ -4608,10 +4618,19 @@ app.post('/api/partage/delete-alert', async (req, res) => {
     
     console.log('⚠️ Mode compatibilité: utilisation de l\'ancienne structure Airtable');
     
+    // Préparer la raison à sauvegarder
+    let reasonToSave = reason || 'Non spécifiée';
+    
+    // Si la raison est "other" et qu'il y a un customReason, l'utiliser comme raison détaillée
+    if (reason === 'other' && customReason) {
+      reasonToSave = `other: ${customReason}`;
+      console.log('📝 Raison personnalisée:', customReason);
+    }
+
     // Mettre à jour avec l'ancienne structure
     await base(emailAlertTableId).update(alertRecord.id, {
       status: 'deleted',
-      deleted_reason: reason || 'Non spécifiée'
+      deleted_reason: reasonToSave
     });
 
     console.log('✅ Alerte supprimée avec succès');
@@ -4708,7 +4727,9 @@ app.post('/api/partage/delete-alert', async (req, res) => {
       message: 'Alerte supprimée avec succès',
       data: {
         email: alertRecord.fields.email,
-        reason: reason || 'Non spécifiée'
+        reason: reason || 'Non spécifiée',
+        customReason: customReason || null,
+        savedReason: reasonToSave
       }
     });
 
