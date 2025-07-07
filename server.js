@@ -3819,7 +3819,8 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
       message,
       announcementDetails,
       timestamp,
-      source
+      source,
+      skipSenderCc // Nouveau paramètre pour désactiver le cc automatique
     } = req.body;
 
     console.log('📬 Nouvelle demande de contact:', {
@@ -3939,10 +3940,9 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
     try {
       console.log('📧 Envoi de l\'email de contact...');
       
-      const { data: emailData, error: emailError } = await resend.emails.send({
+      const emailConfig = {
         from: 'DodoPartage <noreply@dodomove.fr>',
         to: [authorEmail],
-        cc: [contactEmail], // Copie à l'expéditeur
         subject: `📬 Nouveau contact pour votre annonce ${reference}`,
         html: `
         <!DOCTYPE html>
@@ -4034,7 +4034,17 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
         </body>
         </html>
         `,
-      });
+      };
+
+      // Ajouter cc seulement si skipSenderCc n'est pas true
+      if (!skipSenderCc) {
+        emailConfig.cc = [contactEmail];
+        console.log('📧 Copie (cc) envoyée à l\'expéditeur:', contactEmail);
+      } else {
+        console.log('🚫 Copie (cc) désactivée par skipSenderCc');
+      }
+
+      const { data: emailData, error: emailError } = await resend.emails.send(emailConfig);
 
       if (emailError) {
         console.error('❌ Erreur email:', emailError);
