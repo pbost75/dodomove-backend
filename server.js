@@ -292,7 +292,7 @@ async function findMatchingAlerts(announcement) {
     
     // Récupérer toutes les alertes actives
     const alertRecords = await base(emailAlertTableId).select({
-      filterByFormula: `{status} = 'Active'`,
+      filterByFormula: `{status} = 'active'`,
       fields: ['type', 'departure', 'arrival', 'volume_min', 'email', 'delete_token']
     }).all();
 
