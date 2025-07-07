@@ -4618,20 +4618,20 @@ app.post('/api/partage/delete-alert', async (req, res) => {
     
     console.log('⚠️ Mode compatibilité: utilisation de l\'ancienne structure Airtable');
     
-    // Préparer la raison à sauvegarder
-    let reasonToSave = reason || 'Non spécifiée';
+    // Préparer les données de mise à jour
+    const updateData = {
+      status: 'deleted',
+      deleted_reason: reason || 'not_specified'
+    };
     
-    // Si la raison est "other" et qu'il y a un customReason, l'utiliser comme raison détaillée
+    // Si la raison est "other" et qu'il y a un customReason, l'ajouter dans le champ séparé
     if (reason === 'other' && customReason) {
-      reasonToSave = `other: ${customReason}`;
-      console.log('📝 Raison personnalisée:', customReason);
+      updateData.delete_reason_other = customReason;
+      console.log('📝 Raison personnalisée sauvegardée dans delete_reason_other:', customReason);
     }
 
-    // Mettre à jour avec l'ancienne structure
-    await base(emailAlertTableId).update(alertRecord.id, {
-      status: 'deleted',
-      deleted_reason: reasonToSave
-    });
+    // Mettre à jour avec la structure correcte
+    await base(emailAlertTableId).update(alertRecord.id, updateData);
 
     console.log('✅ Alerte supprimée avec succès');
 
@@ -4727,9 +4727,9 @@ app.post('/api/partage/delete-alert', async (req, res) => {
       message: 'Alerte supprimée avec succès',
       data: {
         email: alertRecord.fields.email,
-        reason: reason || 'Non spécifiée',
+        reason: reason || 'not_specified',
         customReason: customReason || null,
-        savedReason: reasonToSave
+        savedToAirtable: updateData
       }
     });
 
