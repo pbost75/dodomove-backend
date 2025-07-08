@@ -2955,11 +2955,12 @@ app.get('/api/partage/get-announcements', async (req, res) => {
       arrival = '',           // filtrer par lieu d'arrivée  
       volumeMin = '',         // volume minimum
       volumeMax = '',         // volume maximum
+      periods = '',           // périodes sélectionnées (format: "Septembre 2025,Octobre 2025")
       status = 'published'    // published, pending_validation, all
     } = req.query;
 
     console.log('🔍 Paramètres de filtrage reçus:', {
-      type, departure, arrival, volumeMin, volumeMax, status
+      type, departure, arrival, volumeMin, volumeMax, periods, status
     });
 
     // Vérifier les variables d'environnement
@@ -3148,6 +3149,105 @@ app.get('/api/partage/get-announcements', async (req, res) => {
       });
     }
 
+    // Filtre par périodes sélectionnées (nouveau)
+    if (periods) {
+      console.log('🗓️ Filtrage par périodes:', periods);
+      
+      // Parser les périodes sélectionnées "Septembre 2025,Octobre 2025"
+      const selectedPeriods = periods.split(',').map(p => p.trim()).filter(p => p.length > 0);
+      
+      if (selectedPeriods.length > 0) {
+        filteredAnnouncements = filteredAnnouncements.filter(ann => {
+          if (ann.request_type === 'offer') {
+            // Pour les offres : vérifier la shipping_date
+            if (ann.shipping_date) {
+              try {
+                const shippingDate = new Date(ann.shipping_date);
+                const monthNames = [
+                  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+                  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+                ];
+                
+                const monthYear = `${monthNames[shippingDate.getMonth()]} ${shippingDate.getFullYear()}`;
+                const matches = selectedPeriods.includes(monthYear);
+                
+                console.log('🗓️ Offer match:', {
+                  reference: ann.reference,
+                  shippingDate: ann.shipping_date,
+                  monthYear,
+                  selectedPeriods,
+                  matches
+                });
+                
+                return matches;
+              } catch (error) {
+                console.warn('🗓️ Erreur parsing date offer:', ann.shipping_date, error);
+                return false;
+              }
+            }
+            return false;
+          } else if (ann.request_type === 'search') {
+            // Pour les demandes : vérifier la période formatée ou flexible
+            if (ann.shipping_period_formatted === 'Période flexible') {
+              console.log('🗓️ Request flexible acceptée:', ann.reference);
+              return true; // Inclure les périodes flexibles
+            }
+            
+            if (ann.shipping_period_formatted) {
+              // Parser "Septembre - Octobre 2025" ou "Septembre 2025"
+              const periodMatch = ann.shipping_period_formatted.match(/([A-Za-zàâäéèêëïîôöùûüÿç]+)(?:\s*-\s*([A-Za-zàâäéèêëïîôöùûüÿç]+))?\s+(\d{4})/);
+              
+              if (periodMatch) {
+                const [, startMonth, endMonth, year] = periodMatch;
+                const requestPeriods = [];
+                
+                if (endMonth) {
+                  // Période avec plusieurs mois
+                  const monthsOrder = [
+                    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+                    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+                  ];
+                  
+                  const startIndex = monthsOrder.indexOf(startMonth);
+                  const endIndex = monthsOrder.indexOf(endMonth);
+                  
+                  if (startIndex !== -1 && endIndex !== -1) {
+                    for (let i = startIndex; i <= endIndex; i++) {
+                      requestPeriods.push(`${monthsOrder[i]} ${year}`);
+                    }
+                  }
+                } else {
+                  // Mois unique
+                  requestPeriods.push(`${startMonth} ${year}`);
+                }
+                
+                const hasMatch = requestPeriods.some(requestPeriod => 
+                  selectedPeriods.includes(requestPeriod)
+                );
+                
+                console.log('🗓️ Request match:', {
+                  reference: ann.reference,
+                  periodFormatted: ann.shipping_period_formatted,
+                  requestPeriods,
+                  selectedPeriods,
+                  hasMatch
+                });
+                
+                return hasMatch;
+              } else {
+                console.warn('🗓️ Format période request non reconnu:', ann.shipping_period_formatted);
+                return true; // Inclure en cas de format non reconnu
+              }
+            }
+            return false;
+          }
+          return false;
+        });
+        
+        console.log(`🗓️ Filtrage terminé: ${filteredAnnouncements.length} annonces correspondent aux périodes`);
+      }
+    }
+
     // Statistiques pour le debug
     const stats = {
       total: filteredAnnouncements.length,
@@ -3171,7 +3271,7 @@ app.get('/api/partage/get-announcements', async (req, res) => {
       total: filteredAnnouncements.length,
       stats,
       filters: {
-        applied: { type, departure, arrival, volumeMin, volumeMax, status },
+        applied: { type, departure, arrival, volumeMin, volumeMax, periods, status },
         resultsFiltered: filteredAnnouncements.length < records.length
       },
       backend: {
