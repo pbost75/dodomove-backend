@@ -2266,6 +2266,209 @@ function convertDatesToSelectedMonths(startDate, endDate) {
   console.log('📅 Mois sélectionnés récupérés:', selectedMonths);
   return selectedMonths;
 }
+
+// ========================================
+// FONCTIONS POUR ALERTES AUTOMATIQUES INVERSES
+// ========================================
+
+/**
+ * Génère les critères d'alerte inverse pour une annonce publiée
+ * Si quelqu'un PROPOSE du transport, on lui crée une alerte pour CHERCHER des demandes
+ * Si quelqu'un CHERCHE de la place, on lui crée une alerte pour TROUVER des offres
+ */
+function generateInverseAlertCriteria(announcementFields) {
+  try {
+    const requestType = announcementFields.request_type || 'offer';
+    const departureCountry = announcementFields.departure_country;
+    const arrivalCountry = announcementFields.arrival_country;
+    
+    // Vérifier qu'on a les données nécessaires
+    if (!departureCountry || !arrivalCountry) {
+      console.log('⚠️ Données manquantes pour alerte inverse:', { departureCountry, arrivalCountry });
+      return null;
+    }
+    
+    // Normaliser les pays pour les alertes
+    const departure = departureCountry.toLowerCase();
+    const arrival = arrivalCountry.toLowerCase();
+    
+    let inverseType;
+    let volumeMin;
+    
+    if (requestType === 'offer') {
+      // Si quelqu'un PROPOSE du transport → créer alerte REQUEST (chercher des demandes)
+      inverseType = 'request';
+      
+      // Volume min = le volume minimum accepté dans l'offre
+      // (pour être alerté de gens qui cherchent ce qu'il peut transporter)
+      volumeMin = Math.max(1, announcementFields.container_minimum_volume || 1);
+      
+      console.log(`🔄 Alerte inverse OFFER→REQUEST: chercher des demandes ${departure}→${arrival} avec ≥${volumeMin}m³`);
+      
+    } else if (requestType === 'search') {
+      // Si quelqu'un CHERCHE de la place → créer alerte OFFER (chercher des offres)
+      inverseType = 'offer';
+      
+      // Volume min = le volume qu'il recherche
+      // (pour être alerté de gens qui proposent assez de place)
+      volumeMin = Math.max(1, announcementFields.volume_needed || 1);
+      
+      console.log(`🔄 Alerte inverse SEARCH→OFFER: chercher des offres ${departure}→${arrival} avec ≥${volumeMin}m³`);
+      
+    } else {
+      console.log('⚠️ Type d\'annonce non reconnu pour alerte inverse:', requestType);
+      return null;
+    }
+    
+    return {
+      type: inverseType,
+      departure: departure,
+      arrival: arrival,
+      volume_min: volumeMin
+    };
+    
+  } catch (error) {
+    console.error('❌ Erreur lors de la génération des critères d\'alerte inverse:', error);
+    return null;
+  }
+}
+
+/**
+ * Crée une alerte automatiquement sans envoyer l'email de confirmation
+ * Utilisée pour les alertes inverses après publication d'annonce
+ */
+async function createAutomaticAlert(alertCriteria, email, options = {}) {
+  try {
+    const {
+      skipConfirmationEmail = true,
+      source = 'automatic',
+      authorName = '',
+      originalAnnouncement = ''
+    } = options;
+    
+    console.log('🤖 Création alerte automatique:', {
+      email: email,
+      type: alertCriteria.type,
+      departure: alertCriteria.departure,
+      arrival: alertCriteria.arrival,
+      volume_min: alertCriteria.volume_min,
+      skipEmail: skipConfirmationEmail
+    });
+    
+    // Validation des données requises
+    if (!alertCriteria.type || !alertCriteria.departure || !alertCriteria.arrival || 
+        alertCriteria.volume_min === undefined || !email) {
+      return {
+        success: false,
+        error: 'Données manquantes pour création alerte automatique'
+      };
+    }
+
+    // Validation du type
+    if (alertCriteria.type !== 'offer' && alertCriteria.type !== 'request') {
+      return {
+        success: false,
+        error: 'Type invalide pour alerte automatique'
+      };
+    }
+
+    // Validation de l'email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return {
+        success: false,
+        error: 'Format d\'email invalide pour alerte automatique'
+      };
+    }
+
+    // Vérifier s'il n'existe pas déjà une alerte similaire pour cet utilisateur
+    const emailAlertTableId = process.env.AIRTABLE_EMAIL_ALERT_TABLE_ID || 'tblVuVneCZTot07sB';
+    
+    try {
+      const existingAlerts = await base(emailAlertTableId).select({
+        filterByFormula: `AND(
+          {email} = '${email}',
+          {type} = '${alertCriteria.type}',
+          {departure} = '${alertCriteria.departure}',
+          {arrival} = '${alertCriteria.arrival}',
+          {status} = 'active'
+        )`,
+        maxRecords: 1
+      }).firstPage();
+      
+      if (existingAlerts.length > 0) {
+        console.log('⚠️ Alerte similaire déjà existante pour cet utilisateur - pas de création');
+        return {
+          success: false,
+          error: 'Alerte similaire déjà existante',
+          duplicate: true
+        };
+      }
+    } catch (checkError) {
+      console.log('⚠️ Erreur lors de la vérification de doublon:', checkError.message);
+      // On continue quand même la création
+    }
+
+    // Générer un token unique pour la suppression
+    const deleteToken = 'del_auto_' + Date.now() + '_' + Math.random().toString(36).substr(2, 15);
+    
+    // Créer l'enregistrement dans Airtable
+    const alertRecord = await base(emailAlertTableId).create([
+      {
+        fields: {
+          "email": email,
+          "type": alertCriteria.type,
+          "departure": alertCriteria.departure,
+          "arrival": alertCriteria.arrival,
+          "volume_min": alertCriteria.volume_min,
+          "status": 'active',
+          "delete_token": deleteToken,
+          "created_source": source,
+          "original_announcement": originalAnnouncement || '',
+          "author_name": authorName || '',
+          "auto_created": true,
+          "confirmation_email_sent": false
+        }
+      }
+    ]);
+
+    console.log('✅ Alerte automatique créée avec succès dans Airtable:', alertRecord[0].id);
+
+    // 📧 PAS d'email de confirmation si skipConfirmationEmail = true
+    if (!skipConfirmationEmail) {
+      console.log('📧 Envoi email de confirmation d\'alerte automatique...');
+      // Ici on pourrait ajouter l'envoi d'email si nécessaire dans le futur
+    } else {
+      console.log('📧 Email de confirmation ignoré (alerte automatique)');
+    }
+
+    return {
+      success: true,
+      message: 'Alerte automatique créée avec succès',
+      data: {
+        recordId: alertRecord[0].id,
+        email: email,
+        type: alertCriteria.type,
+        departure: alertCriteria.departure,
+        arrival: alertCriteria.arrival,
+        volume_min: alertCriteria.volume_min,
+        deleteToken: deleteToken,
+        autoCreated: true,
+        confirmationEmailSent: false,
+        source: source
+      }
+    };
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la création d\'alerte automatique:', error);
+    return {
+      success: false,
+      error: 'Erreur technique lors de la création d\'alerte automatique',
+      details: error.message
+    };
+  }
+}
+
 // Route pour soumettre une demande de recherche de place DodoPartage
 app.post('/api/partage/submit-search-request', async (req, res) => {
   console.log('POST /api/partage/submit-search-request appelé');
@@ -2916,6 +3119,45 @@ app.get('/api/partage/validate-announcement', async (req, res) => {
     } catch (alertError) {
       console.error('⚠️ Erreur lors de la vérification automatique des alertes:', alertError);
       // On continue même si les alertes échouent - l'annonce est déjà publiée
+    }
+
+    // 🤖 CRÉATION AUTOMATIQUE D'UNE ALERTE INVERSE pour l'auteur de l'annonce
+    try {
+      console.log('🤖 Création automatique d\'une alerte inverse pour l\'auteur...');
+      
+      const authorEmail = updatedRecord.fields.contact_email;
+      const authorName = updatedRecord.fields.contact_first_name;
+      
+      if (!authorEmail) {
+        console.log('⚠️ Pas d\'email auteur - alerte inverse non créée');
+      } else {
+        // Générer les critères d'alerte inverse
+        const inverseAlertCriteria = generateInverseAlertCriteria(updatedRecord.fields);
+        
+        if (inverseAlertCriteria) {
+          console.log('📝 Critères d\'alerte inverse:', inverseAlertCriteria);
+          
+          // Créer l'alerte inverse automatiquement (sans email de confirmation)
+          const autoAlertResult = await createAutomaticAlert(inverseAlertCriteria, authorEmail, {
+            skipConfirmationEmail: true,
+            source: 'auto-created-after-publication',
+            authorName: authorName,
+            originalAnnouncement: updatedRecord.fields.reference
+          });
+          
+          if (autoAlertResult.success) {
+            console.log(`✅ Alerte inverse créée automatiquement pour ${authorEmail}`);
+          } else {
+            console.log('⚠️ Échec création alerte inverse:', autoAlertResult.error);
+          }
+        } else {
+          console.log('📭 Aucune alerte inverse pertinente pour cette annonce');
+        }
+      }
+      
+    } catch (autoAlertError) {
+      console.error('⚠️ Erreur lors de la création automatique d\'alerte inverse:', autoAlertError);
+      // On continue même si la création d'alerte automatique échoue
     }
     
     // Réponse de succès pour redirection côté frontend
