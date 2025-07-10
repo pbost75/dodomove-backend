@@ -2385,12 +2385,18 @@ async function createAutomaticAlert(alertCriteria, email, options = {}) {
     const emailAlertTableId = process.env.AIRTABLE_EMAIL_ALERT_TABLE_ID || 'tblVuVneCZTot07sB';
     
     try {
+      // Échapper les guillemets dans les valeurs pour éviter les erreurs de formule
+      const escapedEmail = email.replace(/'/g, "''");
+      const escapedType = alertCriteria.type.replace(/'/g, "''");
+      const escapedDeparture = alertCriteria.departure.replace(/'/g, "''");
+      const escapedArrival = alertCriteria.arrival.replace(/'/g, "''");
+      
       const existingAlerts = await base(emailAlertTableId).select({
         filterByFormula: `AND(
-          {email} = '${email}',
-          {type} = '${alertCriteria.type}',
-          {departure} = '${alertCriteria.departure}',
-          {arrival} = '${alertCriteria.arrival}',
+          {email} = '${escapedEmail}',
+          {type} = '${escapedType}',
+          {departure} = '${escapedDeparture}',
+          {arrival} = '${escapedArrival}',
           {status} = 'active'
         )`,
         maxRecords: 1
@@ -2401,36 +2407,74 @@ async function createAutomaticAlert(alertCriteria, email, options = {}) {
         return {
           success: false,
           error: 'Alerte similaire déjà existante',
-          duplicate: true
+          duplicate: true,
+          existingAlert: {
+            id: existingAlerts[0].id,
+            email: existingAlerts[0].fields.email,
+            type: existingAlerts[0].fields.type
+          }
         };
       }
     } catch (checkError) {
-      console.log('⚠️ Erreur lors de la vérification de doublon:', checkError.message);
-      // On continue quand même la création
+      console.log('⚠️ Erreur lors de la vérification de doublon (on continue quand même):', checkError.message);
+      // On continue quand même la création car c'est juste une vérification
     }
 
     // Générer un token unique pour la suppression
     const deleteToken = 'del_auto_' + Date.now() + '_' + Math.random().toString(36).substr(2, 15);
     
-    // Créer l'enregistrement dans Airtable
-    const alertRecord = await base(emailAlertTableId).create([
-      {
-        fields: {
-          "email": email,
-          "type": alertCriteria.type,
-          "departure": alertCriteria.departure,
-          "arrival": alertCriteria.arrival,
-          "volume_min": alertCriteria.volume_min,
-          "status": 'active',
-          "delete_token": deleteToken,
-          "created_source": source,
-          "original_announcement": originalAnnouncement || '',
-          "author_name": authorName || '',
-          "auto_created": true,
-          "confirmation_email_sent": false
+    // Créer l'enregistrement dans Airtable avec gestion robuste des champs
+    // Champs obligatoires (compatibles avec alertes classiques)
+    const baseFields = {
+      "email": email,
+      "type": alertCriteria.type,
+      "departure": alertCriteria.departure,
+      "arrival": alertCriteria.arrival,
+      "volume_min": alertCriteria.volume_min,
+      "status": 'active',
+      "delete_token": deleteToken
+    };
+    
+    // Champs optionnels (nouveaux) pour traçabilité
+    const extendedFields = {
+      ...baseFields,
+      "created_source": source || 'automatic',
+      "original_announcement": originalAnnouncement || '',
+      "author_name": authorName || '',
+      "auto_created": true,
+      "confirmation_email_sent": false
+    };
+    
+    let alertRecord;
+    
+    try {
+      // Essayer d'abord avec tous les champs (nouveaux + anciens)
+      console.log('📝 Tentative création avec champs étendus...');
+      alertRecord = await base(emailAlertTableId).create([
+        {
+          fields: extendedFields
         }
+      ]);
+      console.log('✅ Alerte créée avec champs étendus');
+      
+    } catch (extendedError) {
+      console.log('⚠️ Échec avec champs étendus, tentative avec champs de base...');
+      console.log('   Erreur:', extendedError.message);
+      
+      try {
+        // Retry avec seulement les champs de base (compatibilité totale)
+        alertRecord = await base(emailAlertTableId).create([
+          {
+            fields: baseFields
+          }
+        ]);
+        console.log('✅ Alerte créée avec champs de base uniquement');
+        
+      } catch (baseError) {
+        console.error('❌ Échec même avec champs de base:', baseError.message);
+        throw baseError; // Re-throw l'erreur si même les champs de base échouent
       }
-    ]);
+    }
 
     console.log('✅ Alerte automatique créée avec succès dans Airtable:', alertRecord[0].id);
 
@@ -2442,6 +2486,9 @@ async function createAutomaticAlert(alertCriteria, email, options = {}) {
       console.log('📧 Email de confirmation ignoré (alerte automatique)');
     }
 
+    // Déterminer si les champs étendus ont été utilisés
+    const usedExtendedFields = alertRecord[0].fields.hasOwnProperty('auto_created');
+    
     return {
       success: true,
       message: 'Alerte automatique créée avec succès',
@@ -2453,9 +2500,11 @@ async function createAutomaticAlert(alertCriteria, email, options = {}) {
         arrival: alertCriteria.arrival,
         volume_min: alertCriteria.volume_min,
         deleteToken: deleteToken,
-        autoCreated: true,
+        autoCreated: usedExtendedFields,
         confirmationEmailSent: false,
-        source: source
+        source: source,
+        fieldsUsed: usedExtendedFields ? 'extended' : 'base-only',
+        compatibility: usedExtendedFields ? 'full' : 'fallback'
       }
     };
 
