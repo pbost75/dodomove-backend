@@ -2288,9 +2288,20 @@ function generateInverseAlertCriteria(announcementFields) {
       return null;
     }
     
-    // Normaliser les pays pour les alertes
-    const departure = departureCountry.toLowerCase();
-    const arrival = arrivalCountry.toLowerCase();
+    // Normaliser les pays pour les alertes (compatible Airtable)
+    const normalizeCountry = (country) => {
+      return country.toLowerCase()
+        .replace(/é|è|ê|ë/g, 'e')
+        .replace(/à|á|â|ã|ä/g, 'a')
+        .replace(/ù|ú|û|ü/g, 'u')
+        .replace(/ì|í|î|ï/g, 'i')
+        .replace(/ò|ó|ô|õ|ö/g, 'o')
+        .replace(/ç/g, 'c')
+        .replace(/ñ/g, 'n');
+    };
+    
+    const departure = normalizeCountry(departureCountry);
+    const arrival = normalizeCountry(arrivalCountry);
     
     let inverseType;
     let volumeMin;
