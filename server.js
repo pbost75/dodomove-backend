@@ -4296,7 +4296,7 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
       
       const contactData = {
         fields: {
-          'announcement_id': announcementId,
+          'announcement_reference': reference,
           'created_at': new Date().toISOString(),
           'ad_type': requestType === 'search' ? 'search' : 'offer', // Type d'annonce
           'status': 'new', // Statut initial ('new' → 'read' → 'replied')
