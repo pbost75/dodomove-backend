@@ -411,9 +411,9 @@ async function sendAlertNotification(alert, announcement) {
     
     // Envoyer l'email avec design cohérent DodoPartage
     const { data: emailData, error: emailError } = await resend.emails.send({
-      from: 'DodoPartage <noreply@dodomove.fr>',
+      from: 'DodoPartage <notifications@dodomove.fr>',
       to: [alert.email],
-      subject: `🔔 Nouvelle annonce trouvée : ${trajet}`,
+              subject: `Nouvelle annonce trouvée : ${trajet}`,
       html: `
       <!DOCTYPE html>
       <html>
@@ -638,8 +638,8 @@ app.post('/send-email', async (req, res) => {
       
       // Envoyer l'email de contact via Resend
       console.log('Envoi de l\'email de contact via Resend...');
-      const { data, error } = await resend.emails.send({
-        from: 'DodoMove Support <noreply@dodomove.fr>',
+          const { data, error } = await resend.emails.send({
+      from: 'DodoPartage <hello@dodomove.fr>',
         to: ['bost.analytics@gmail.com'], // Email de support
         replyTo: [clientEmail], // Permettre de répondre directement au client
         subject: `[Contact Funnel] ${subject}`,
@@ -732,9 +732,9 @@ app.post('/send-email', async (req, res) => {
     // Envoyer l'email via Resend
     console.log('Envoi de l\'email via Resend...');
     const { data, error } = await resend.emails.send({
-      from: 'Dodomove <noreply@dodomove.fr>',
+      from: 'Dodomove <hello@dodomove.fr>',
       to: [email],
-      subject: 'Estimation de votre volume de déménagement 📦',
+              subject: 'Estimation de votre volume de déménagement',
       html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 5px; overflow: hidden;">
         <!-- En-tête avec logo et image -->
@@ -1922,9 +1922,14 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
         console.log('🔑 Token de validation utilisé:', validationToken);
       
       const { data: emailData, error: emailError } = await resend.emails.send({
-        from: 'DodoPartage <noreply@dodomove.fr>',
+        from: 'DodoPartage <hello@dodomove.fr>',
         to: [data.contact.email],
-        subject: '🚨 Confirmez votre annonce DodoPartage',
+        subject: 'Confirmez votre annonce DodoPartage',
+        headers: {
+          'X-Entity-Ref-ID': `dodopartage-validation-${validationToken}`,
+          'List-Unsubscribe': `<${frontendUrl}/unsubscribe?ref=${validationToken}>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+        },
         html: `
         <!DOCTYPE html>
         <html>
@@ -2778,7 +2783,7 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
         console.log('🔑 Token de validation utilisé:', validationToken);
       
       const { data: emailData, error: emailError } = await resend.emails.send({
-        from: 'DodoPartage <noreply@dodomove.fr>',
+        from: 'DodoPartage <hello@dodomove.fr>',
         to: [data.contact.email],
         subject: '🔍 Confirmez votre demande de place DodoPartage',
         html: `
@@ -3045,7 +3050,7 @@ app.get('/api/partage/validate-announcement', async (req, res) => {
       console.log('📧 Envoi de l\'email de confirmation post-validation...');
       
       const { data: emailData, error: emailError } = await resend.emails.send({
-        from: 'DodoPartage <noreply@dodomove.fr>',
+        from: 'DodoPartage <hello@dodomove.fr>',
         to: [updatedRecord.fields.contact_email],
         subject: '✅ Votre annonce DodoPartage est maintenant publiée !',
         html: `
@@ -3711,7 +3716,7 @@ app.post('/api/partage/confirm-deletion', async (req, res) => {
     // Envoyer un email de confirmation de suppression
     try {
       const { data: emailData, error: emailError } = await resend.emails.send({
-        from: 'DodoPartage <noreply@dodomove.fr>',
+        from: 'DodoPartage <hello@dodomove.fr>',
         to: [announcement.contact_email],
         subject: '🗑️ Annonce DodoPartage supprimée',
         html: `
@@ -4101,7 +4106,7 @@ app.post('/api/partage/update-announcement', async (req, res) => {
       const viewUrl = `${frontendUrl}/annonce/${oldData.reference}`;
       
       const { data: emailData, error: emailError } = await resend.emails.send({
-        from: 'DodoPartage <noreply@dodomove.fr>',
+        from: 'DodoPartage <hello@dodomove.fr>',
         to: [data.contact.email],
         subject: '✏️ Annonce DodoPartage modifiée avec succès',
         html: `
@@ -4343,7 +4348,7 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
       console.log('📧 Envoi de l\'email de contact...');
       
       const emailConfig = {
-        from: 'DodoPartage <noreply@dodomove.fr>',
+        from: 'DodoPartage <hello@dodomove.fr>',
         to: [authorEmail],
         subject: `📬 Nouveau contact pour votre annonce ${reference}`,
         html: `
@@ -4536,7 +4541,7 @@ app.get('/test-email-validation', async (req, res) => {
     console.log('📧 Envoi de l\'email de test...');
     
     const { data: emailData, error: emailError } = await resend.emails.send({
-      from: 'DodoPartage <noreply@dodomove.fr>',
+      from: 'DodoPartage <hello@dodomove.fr>',
       to: ['bost.analytics@gmail.com'],
       subject: '🚨 [TEST] Confirmez votre annonce DodoPartage',
       html: `
@@ -4835,9 +4840,9 @@ app.post('/api/partage/create-alert', async (req, res) => {
       const volumeLabel = volume_min === 1 ? 'peu importe' : `${volume_min}m³ minimum`;
       
       const { data: emailData, error: emailError } = await resend.emails.send({
-        from: 'DodoPartage <noreply@dodomove.fr>',
+        from: 'DodoPartage <hello@dodomove.fr>',
         to: [email],
-        subject: '🔔 Alerte DodoPartage créée avec succès',
+        subject: 'Alerte DodoPartage créée avec succès',
         html: `
         <!DOCTYPE html>
         <html>
@@ -5050,7 +5055,7 @@ app.post('/api/partage/delete-alert', async (req, res) => {
     // Optionnel : Envoyer un email de confirmation de suppression
     try {
       const { data: emailData, error: emailError } = await resend.emails.send({
-        from: 'DodoPartage <noreply@dodomove.fr>',
+        from: 'DodoPartage <hello@dodomove.fr>',
         to: [alertRecord.fields.email],
         subject: '🗑️ Alerte DodoPartage supprimée',
         html: `
@@ -5474,7 +5479,7 @@ app.post('/api/partage/send-expiration-reminder', async (req, res) => {
 
     // Envoyer l'email de rappel
     const { data: emailData, error: emailError } = await resend.emails.send({
-      from: 'DodoPartage <noreply@dodomove.fr>',
+      from: 'DodoPartage <hello@dodomove.fr>',
       to: [announcement.contact_email],
       subject: `⚠️ Votre annonce DodoPartage expire dans ${daysRemaining} jour${daysRemaining > 1 ? 's' : ''}`,
       html: `
@@ -5797,7 +5802,7 @@ app.post('/api/partage/send-post-expiration-notification', async (req, res) => {
 
     // Envoyer l'email de notification
     const { data: emailData, error: emailError } = await resend.emails.send({
-      from: 'DodoPartage <noreply@dodomove.fr>',
+      from: 'DodoPartage <hello@dodomove.fr>',
       to: [announcement.contact_email],
       subject: '📅 Votre annonce DodoPartage a expiré',
       html: `
