@@ -26,7 +26,7 @@ function generateDeliverabilityHeaders(emailType, referenceId, frontendUrl = EMA
 
   // Ajouter List-Unsubscribe seulement pour les emails marketing/notifications
   if (['alert', 'notification', 'marketing'].includes(emailType)) {
-    headers['List-Unsubscribe'] = `<${frontendUrl}/unsubscribe?ref=${referenceId}>`;
+    headers['List-Unsubscribe'] = `<${frontendUrl}/supprimer-alerte/${referenceId}>`;
     headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
   }
 

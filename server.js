@@ -1927,7 +1927,7 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
         subject: 'Confirmez votre annonce DodoPartage',
         headers: {
           'X-Entity-Ref-ID': `dodopartage-validation-${validationToken}`,
-          'List-Unsubscribe': `<${frontendUrl}/unsubscribe?ref=${validationToken}>`,
+          'List-Unsubscribe': `<${frontendUrl}/supprimer-alerte/${validationToken}>`,
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
         },
         html: `
