@@ -1,4 +1,4 @@
-name: Daily Validation Reminders
+name: 📬 DodoPartage - Daily Validation Reminders
 
 on:
   schedule:
