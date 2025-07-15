@@ -2789,6 +2789,9 @@ app.post('/api/partage/submit-search-request', async (req, res) => {
         from: 'DodoPartage <hello@dodomove.fr>',
         to: [data.contact.email],
         subject: '🔍 Confirmez votre demande de place DodoPartage',
+        headers: {
+          'X-Entity-Ref-ID': `dodopartage-search-validation-${validationToken}`
+        },
         html: `
         <!DOCTYPE html>
         <html>
@@ -3056,6 +3059,9 @@ app.get('/api/partage/validate-announcement', async (req, res) => {
         from: 'DodoPartage <hello@dodomove.fr>',
         to: [updatedRecord.fields.contact_email],
         subject: '✅ Votre annonce DodoPartage est maintenant publiée !',
+        headers: {
+          'X-Entity-Ref-ID': `dodopartage-published-${updatedRecord.fields.reference}`
+        },
         html: `
         <!DOCTYPE html>
         <html>
@@ -3722,6 +3728,9 @@ app.post('/api/partage/confirm-deletion', async (req, res) => {
         from: 'DodoPartage <hello@dodomove.fr>',
         to: [announcement.contact_email],
         subject: '🗑️ Annonce DodoPartage supprimée',
+        headers: {
+          'X-Entity-Ref-ID': `dodopartage-deleted-${announcement.reference}`
+        },
         html: `
         <!DOCTYPE html>
         <html>
@@ -4112,6 +4121,9 @@ app.post('/api/partage/update-announcement', async (req, res) => {
         from: 'DodoPartage <hello@dodomove.fr>',
         to: [data.contact.email],
         subject: '✏️ Annonce DodoPartage modifiée avec succès',
+        headers: {
+          'X-Entity-Ref-ID': `dodopartage-modified-${oldData.reference}`
+        },
         html: `
         <!DOCTYPE html>
         <html>
@@ -4547,6 +4559,9 @@ app.get('/test-email-validation', async (req, res) => {
       from: 'DodoPartage <hello@dodomove.fr>',
       to: ['bost.analytics@gmail.com'],
       subject: '🚨 [TEST] Confirmez votre annonce DodoPartage',
+      headers: {
+        'X-Entity-Ref-ID': `dodopartage-test-${testValidationToken}`
+      },
       html: `
       <!DOCTYPE html>
       <html>
@@ -5061,6 +5076,9 @@ app.post('/api/partage/delete-alert', async (req, res) => {
         from: 'DodoPartage <hello@dodomove.fr>',
         to: [alertRecord.fields.email],
         subject: '🗑️ Alerte DodoPartage supprimée',
+        headers: {
+          'X-Entity-Ref-ID': `dodopartage-alert-deleted-${token}`
+        },
         html: `
         <!DOCTYPE html>
         <html>
@@ -5485,6 +5503,9 @@ app.post('/api/partage/send-expiration-reminder', async (req, res) => {
       from: 'DodoPartage <hello@dodomove.fr>',
       to: [announcement.contact_email],
       subject: `⚠️ Votre annonce DodoPartage expire dans ${daysRemaining} jour${daysRemaining > 1 ? 's' : ''}`,
+      headers: {
+        'X-Entity-Ref-ID': `dodopartage-expiring-${announcement.reference}`
+      },
       html: `
       <!DOCTYPE html>
       <html>
@@ -5808,6 +5829,9 @@ app.post('/api/partage/send-post-expiration-notification', async (req, res) => {
       from: 'DodoPartage <hello@dodomove.fr>',
       to: [announcement.contact_email],
       subject: '📅 Votre annonce DodoPartage a expiré',
+      headers: {
+        'X-Entity-Ref-ID': `dodopartage-expired-${announcement.reference}`
+      },
       html: `
       <!DOCTYPE html>
       <html>
