@@ -4735,6 +4735,125 @@ app.get('/test-email-validation', async (req, res) => {
   }
 });
 
+// Route de test pour email d'alerte matching (notifications@dodomove.fr)
+app.get('/test-mail-tester-alert', async (req, res) => {
+  console.log('GET /test-mail-tester-alert appelé pour tester email d\'alerte');
+  
+  try {
+    const testEmail = req.query.email || 'test-9lbwa5zcm@srv1.mail-tester.com';
+    const deleteToken = 'test-alert-' + Date.now();
+    const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://www.dodomove.fr/partage';
+    
+    console.log('📧 Envoi alerte mail-tester vers:', testEmail);
+    
+    const { data: emailData, error: emailError } = await resend.emails.send({
+      from: 'DodoPartage <notifications@dodomove.fr>',
+      to: [testEmail],
+      subject: 'Nouvelle annonce trouvée : Paris → Martinique',
+      headers: {
+        'X-Entity-Ref-ID': `dodopartage-alert-test-${deleteToken}`,
+        'List-Unsubscribe': `<${frontendUrl}/supprimer-alerte/${deleteToken}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+      },
+      html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Nouvelle annonce DodoPartage</title>
+      </head>
+      <body style="font-family: 'Inter', sans-serif; background-color: #f8fafc; margin: 0; padding: 20px;">
+        <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
+          
+          <!-- Header -->
+          <div style="background: linear-gradient(135deg, #243163 0%, #1e2951 100%); padding: 40px 30px; text-align: center;">
+            <h1 style="color: white; font-size: 28px; margin: 0; font-weight: 700;">
+              🚢 DodoPartage
+            </h1>
+            <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
+              Groupage collaboratif DOM-TOM
+            </p>
+          </div>
+
+          <!-- Contenu principal -->
+          <div style="padding: 40px 30px;">
+            <h2 style="color: #1f2937; font-size: 24px; margin: 0 0 20px 0; font-weight: 600;">
+              🔔 Nouvelle annonce trouvée !
+            </h2>
+            
+            <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+              Une nouvelle annonce correspond à votre recherche :
+            </p>
+
+            <div style="background: #f8fafc; padding: 20px; border-radius: 12px; margin: 20px 0;">
+              <h3 style="color: #243163; font-size: 18px; margin: 0 0 10px 0;">
+                📍 Trajet : Paris → Martinique
+              </h3>
+              <p style="color: #6b7280; margin: 5px 0;">
+                <strong>Type :</strong> Recherche de place dans un conteneur
+              </p>
+              <p style="color: #6b7280; margin: 5px 0;">
+                <strong>Volume :</strong> 5m³ disponible
+              </p>
+              <p style="color: #6b7280; margin: 5px 0;">
+                <strong>Date :</strong> Février 2024
+              </p>
+            </div>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="https://www.dodomove.fr/partage/" 
+                 style="display: inline-block; background: #243163; color: white; padding: 16px 32px; 
+                        text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px;">
+                📱 Voir l'annonce
+              </a>
+            </div>
+
+            <div style="text-align: center; margin: 20px 0;">
+              <a href="${frontendUrl}/supprimer-alerte/${deleteToken}" 
+                 style="color: #9ca3af; font-size: 14px; text-decoration: underline;">
+                🗑️ Me désabonner de cette alerte
+              </a>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+            <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+              © 2024 DodoPartage - Une initiative Dodomove
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+      `
+    });
+
+    if (emailError) {
+      throw emailError;
+    }
+
+    console.log('✅ Email alerte mail-tester envoyé:', emailData.id);
+    
+    res.status(200).json({
+      success: true,
+      message: `Email d'alerte test envoyé à ${testEmail}`,
+      emailId: emailData.id,
+      emailType: 'Alert Matching (notifications@dodomove.fr)',
+      headers: ['X-Entity-Ref-ID', 'List-Unsubscribe', 'List-Unsubscribe-Post'],
+      mailTesterUrl: 'https://www.mail-tester.com',
+      instructions: 'Retournez sur mail-tester.com pour voir le score de l\'email d\'alerte'
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur test alerte:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Route pour ajouter des tokens aux annonces existantes (temporaire pour migration)
 app.post('/api/partage/add-missing-tokens', async (req, res) => {
   console.log('POST /api/partage/add-missing-tokens appelé');
