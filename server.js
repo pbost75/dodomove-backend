@@ -6888,6 +6888,115 @@ server.on('error', (error) => {
   console.error('Erreur du serveur:', error);
 });
 
+// Endpoint pour tester les rappels avec délai réduit (1h au lieu de 24h)
+app.post('/api/partage/test-reminders-1h', async (req, res) => {
+  console.log('POST /api/partage/test-reminders-1h appelé (TEST MODE)');
+  
+  try {
+    // Utiliser la table DodoPartage
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
+    
+    console.log('🧪 MODE TEST: Recherche des annonces créées il y a plus d\'1h (au lieu de 24h)');
+    
+    // Rechercher les annonces qui :
+    // 1. Sont en status 'pending' (pas encore validées)
+    // 2. Ont été créées il y a plus de 1h (pour tester)
+    const pendingRecords = await base(partageTableId).select({
+      filterByFormula: `
+        AND(
+          {status} = 'pending',
+          DATETIME_DIFF(NOW(), {created_at}, 'hours') >= 1
+        )
+      `,
+      fields: [
+        'reference', 'created_at', 'status', 'contact_email', 'contact_first_name',
+        'validation_token', 'departure_city', 'departure_country', 
+        'arrival_city', 'arrival_country', 'request_type'
+      ]
+    }).all();
+    
+    console.log(`📋 ${pendingRecords.length} annonce(s) en attente de rappel trouvée(s) (test 1h)`);
+    
+    if (pendingRecords.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'Aucune annonce nécessitant un rappel (test 1h)',
+        remindersSent: 0,
+        testMode: '1h_delay'
+      });
+    }
+    
+    const results = [];
+    let successCount = 0;
+    let errorCount = 0;
+    
+    // Traiter uniquement la première annonce pour les tests
+    const record = pendingRecords[0];
+    const announcement = record.fields;
+    
+    console.log(`🧪 TEST rappel pour: ${announcement.contact_email} (${announcement.reference})`);
+    
+    try {
+      // Envoyer l'email de rappel
+      const emailResult = await sendValidationReminderEmail(record);
+      
+      if (emailResult.success) {
+        console.log(`✅ Rappel test envoyé pour: ${announcement.contact_email}`);
+        successCount++;
+        
+        results.push({
+          reference: announcement.reference,
+          email: announcement.contact_email,
+          status: 'success',
+          emailId: emailResult.emailId
+        });
+        
+      } else {
+        console.error(`❌ Erreur envoi email test pour ${announcement.reference}:`, emailResult.error);
+        errorCount++;
+        
+        results.push({
+          reference: announcement.reference,
+          email: announcement.contact_email,
+          status: 'email_failed',
+          error: emailResult.error
+        });
+      }
+      
+    } catch (error) {
+      console.error(`❌ Erreur traitement test ${announcement.reference}:`, error);
+      errorCount++;
+      
+      results.push({
+        reference: announcement.reference,
+        email: announcement.contact_email,
+        status: 'processing_failed',
+        error: error.message
+      });
+    }
+    
+    console.log(`✅ Test rappel terminé: ${successCount} succès, ${errorCount} erreurs`);
+    
+    res.status(200).json({
+      success: true,
+      message: `Test rappel de validation traité (délai 1h)`,
+      remindersSent: successCount,
+      errors: errorCount,
+      totalProcessed: 1,
+      testMode: '1h_delay',
+      details: results
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur lors du test rappel 1h:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors du test rappel 1h',
+      message: error.message
+    });
+  }
+});
+
 process.on('uncaughtException', (error) => {
   console.error('Exception non gérée:', error);
 });
