@@ -6585,18 +6585,22 @@ app.post('/api/partage/send-validation-reminders', async (req, res) => {
     // Rechercher les annonces qui :
     // 1. Sont en status 'pending' (pas encore validées)
     // 2. Ont été créées il y a plus de 24h
-    // Pour l'instant, on ignore le champ reminder_sent car il peut ne pas exister
+    // 3. N'ont pas encore reçu de rappel (verif_email_reminder_sent != true)
     const pendingRecords = await base(partageTableId).select({
       filterByFormula: `
         AND(
           {status} = 'pending',
-          DATETIME_DIFF(NOW(), {created_at}, 'hours') >= 24
+          DATETIME_DIFF(NOW(), {created_at}, 'hours') >= 24,
+          OR(
+            {verif_email_reminder_sent} != TRUE(),
+            {verif_email_reminder_sent} = BLANK()
+          )
         )
       `,
       fields: [
         'reference', 'created_at', 'status', 'contact_email', 'contact_first_name',
         'validation_token', 'departure_city', 'departure_country', 
-        'arrival_city', 'arrival_country', 'request_type'
+        'arrival_city', 'arrival_country', 'request_type', 'verif_email_reminder_sent'
       ]
     }).all();
     
@@ -6625,11 +6629,16 @@ app.post('/api/partage/send-validation-reminders', async (req, res) => {
         const emailResult = await sendValidationReminderEmail(record);
         
         if (emailResult.success) {
-          // Marquer le rappel comme envoyé dans Airtable (si les champs existent)
+          // Marquer le rappel comme envoyé dans Airtable
           try {
-            // Pour l'instant, on ne met pas à jour reminder_sent car le champ peut ne pas exister
-            // Dans une version future, on pourrait créer le champ automatiquement
-            console.log(`✅ Rappel envoyé pour: ${announcement.contact_email} (marquage ignoré pour l'instant)`);
+            await base(partageTableId).update([{
+              id: record.id,
+              fields: {
+                verif_email_reminder_sent: true
+              }
+            }]);
+            
+            console.log(`✅ Rappel envoyé et marqué pour: ${announcement.contact_email}`);
             successCount++;
             
             results.push({
@@ -6639,16 +6648,17 @@ app.post('/api/partage/send-validation-reminders', async (req, res) => {
               emailId: emailResult.emailId
             });
             
-          } catch (logError) {
-            // Normalement pas d'erreur car on ne fait que du logging
-            console.error(`❌ Erreur logging pour ${announcement.reference}:`, logError);
-            // L'email a bien été envoyé quand même
+          } catch (updateError) {
+            console.error(`❌ Erreur mise à jour Airtable pour ${announcement.reference}:`, updateError);
+            // On continue même si la mise à jour échoue - l'email a été envoyé
             results.push({
               reference: announcement.reference,
               email: announcement.contact_email,
-              status: 'success',
-              emailId: emailResult.emailId
+              status: 'email_sent_update_failed',
+              emailId: emailResult.emailId,
+              error: updateError.message
             });
+            successCount++; // L'email a bien été envoyé
           }
           
         } else {
@@ -6901,17 +6911,22 @@ app.post('/api/partage/test-reminders-1h', async (req, res) => {
     // Rechercher les annonces qui :
     // 1. Sont en status 'pending' (pas encore validées)
     // 2. Ont été créées il y a plus de 1h (pour tester)
+    // 3. N'ont pas encore reçu de rappel (verif_email_reminder_sent != true)
     const pendingRecords = await base(partageTableId).select({
       filterByFormula: `
         AND(
           {status} = 'pending',
-          DATETIME_DIFF(NOW(), {created_at}, 'hours') >= 1
+          DATETIME_DIFF(NOW(), {created_at}, 'hours') >= 1,
+          OR(
+            {verif_email_reminder_sent} != TRUE(),
+            {verif_email_reminder_sent} = BLANK()
+          )
         )
       `,
       fields: [
         'reference', 'created_at', 'status', 'contact_email', 'contact_first_name',
         'validation_token', 'departure_city', 'departure_country', 
-        'arrival_city', 'arrival_country', 'request_type'
+        'arrival_city', 'arrival_country', 'request_type', 'verif_email_reminder_sent'
       ]
     }).all();
     
