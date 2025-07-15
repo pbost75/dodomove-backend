@@ -1,0 +1,26 @@
+name: Daily Validation Reminders
+
+on:
+  schedule:
+    # Tous les jours à 10h00 UTC (12h Paris en été, 11h en hiver)
+    - cron: '0 10 * * *'
+  workflow_dispatch: # Permet de déclencher manuellement
+
+jobs:
+  send-reminders:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Send validation reminders
+      run: |
+        response=$(curl -s -X POST "https://web-production-7b738.up.railway.app/api/partage/send-validation-reminders" \
+          -H "Content-Type: application/json")
+        echo "Rappels envoyés: $response"
+        
+        # Vérifier si la requête a réussi
+        if echo "$response" | grep -q '"success":true'; then
+          echo "✅ Rappels envoyés avec succès"
+        else
+          echo "❌ Erreur lors de l'envoi des rappels"
+          exit 1
+        fi 
