@@ -413,7 +413,12 @@ async function sendAlertNotification(alert, announcement) {
     const { data: emailData, error: emailError } = await resend.emails.send({
       from: 'DodoPartage <notifications@dodomove.fr>',
       to: [alert.email],
-              subject: `Nouvelle annonce trouvée : ${trajet}`,
+      subject: `Nouvelle annonce trouvée : ${trajet}`,
+      headers: {
+        'X-Entity-Ref-ID': `dodopartage-alert-${alert.delete_token}`,
+        'List-Unsubscribe': `<${frontendUrl}/supprimer-alerte/${alert.delete_token}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+      },
       html: `
       <!DOCTYPE html>
       <html>
@@ -1926,9 +1931,7 @@ app.post('/api/partage/submit-announcement', async (req, res) => {
         to: [data.contact.email],
         subject: 'Confirmez votre annonce DodoPartage',
         headers: {
-          'X-Entity-Ref-ID': `dodopartage-validation-${validationToken}`,
-          'List-Unsubscribe': `<${frontendUrl}/supprimer-alerte/${validationToken}>`,
-          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+          'X-Entity-Ref-ID': `dodopartage-validation-${validationToken}`
         },
         html: `
         <!DOCTYPE html>
