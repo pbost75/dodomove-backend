@@ -6744,6 +6744,21 @@ app.post('/api/partage/test-reminder', async (req, res) => {
     
     console.log(`🧪 Test rappel pour: ${announcement.contact_email} (${reference})`);
     
+    // 🚨 VÉRIFICATION ANTI-SPAM : Ne pas envoyer si déjà envoyé
+    if (announcement.verif_email_reminder_sent === true) {
+      console.log(`⚠️ Rappel déjà envoyé pour ${reference} - test bloqué`);
+      return res.status(200).json({
+        success: false,
+        message: 'Test bloqué : rappel déjà envoyé pour cette annonce',
+        details: {
+          reference: reference,
+          email: announcement.contact_email,
+          reminderAlreadySent: true,
+          status: announcement.status
+        }
+      });
+    }
+    
     // Envoyer l'email de rappel
     const emailResult = await sendValidationReminderEmail(record);
     
