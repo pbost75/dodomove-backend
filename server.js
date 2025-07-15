@@ -280,6 +280,133 @@ function generateEmailUrl(contactEmail, requestType, announcementData, contactNa
 }
 
 // ========================================
+// FONCTION EMAIL DE RAPPEL VALIDATION
+// ========================================
+
+/**
+ * Crée et envoie un email de rappel pour une annonce non validée
+ * Appelé 24h après la création si l'annonce est toujours en status 'pending'
+ */
+async function sendValidationReminderEmail(announcementRecord) {
+  try {
+    const announcement = announcementRecord.fields;
+    const validationToken = announcement.validation_token;
+    const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://www.dodomove.fr/partage';
+    const validationUrl = `${frontendUrl}/validating/${validationToken}`;
+    
+    console.log('📧 Envoi email de rappel de validation pour:', announcement.contact_email);
+    
+    // Déterminer le type d'annonce pour personnaliser le message
+    const isSearchRequest = announcement.request_type === 'search';
+    const departureLocation = `${announcement.departure_city}, ${announcement.departure_country}`;
+    const arrivalLocation = `${announcement.arrival_city}, ${announcement.arrival_country}`;
+    
+    const { data: emailData, error: emailError } = await resend.emails.send({
+      from: 'DodoPartage <hello@dodomove.fr>',
+      to: [announcement.contact_email],
+      subject: '📬 Votre annonce DodoPartage attend toujours votre validation',
+      headers: {
+        'X-Entity-Ref-ID': `dodopartage-reminder-${validationToken}`
+      },
+      html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Rappel de validation - DodoPartage</title>
+      </head>
+      <body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; line-height: 1.6;">
+        <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);">
+          
+          <!-- Header moderne avec les bonnes couleurs -->
+          <div style="background: linear-gradient(135deg, #243163 0%, #1e2951 100%); padding: 40px 30px; text-align: center;">
+            <h1 style="color: white; font-family: 'Inter', sans-serif; font-size: 28px; margin: 0; font-weight: 700;">
+              🚢 DodoPartage
+            </h1>
+            <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
+              Groupage collaboratif DOM-TOM
+            </p>
+          </div>
+          
+          <!-- Contenu principal -->
+          <div style="padding: 40px 30px;">
+            <h2 style="color: #1e293b; font-size: 24px; margin: 0 0 20px 0; font-weight: 600;">
+              Bonjour ${announcement.contact_first_name} 👋
+            </h2>
+            
+            <p style="color: #475569; font-size: 16px; margin: 0 0 20px 0;">
+              Nous avons bien reçu votre ${isSearchRequest ? 'demande de place' : 'offre de groupage'} pour le trajet <strong>${departureLocation} → ${arrivalLocation}</strong>.
+            </p>
+            
+            <!-- Message de rappel gentle -->
+            <div style="border-left: 4px solid #3b82f6; background-color: #eff6ff; padding: 20px; margin: 30px 0;">
+              <div style="display: flex; align-items: center;">
+                <span style="font-size: 20px; margin-right: 12px;">📬</span>
+                <div>
+                  <h3 style="color: #1d4ed8; font-size: 16px; margin: 0 0 4px 0; font-weight: 600;">
+                    Validation en attente
+                  </h3>
+                  <p style="color: #1e40af; font-size: 14px; margin: 0; line-height: 1.4;">
+                    Votre ${isSearchRequest ? 'demande' : 'annonce'} sera visible dès que vous confirmerez votre email
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Bouton CTA -->
+            <div style="text-align: center; margin: 32px 0;">
+              <a href="${validationUrl}" 
+                 style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; text-decoration: none; padding: 16px 32px; border-radius: 12px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); transition: all 0.2s ease;">
+                ✅ Confirmer mon email
+              </a>
+            </div>
+            
+            <!-- FAQ mini -->
+            <div style="background-color: #f8fafc; padding: 20px; border-radius: 12px; margin: 30px 0;">
+              <h3 style="color: #374151; font-size: 16px; margin: 0 0 12px 0; font-weight: 600;">
+                Email non reçu ? 🤔
+              </h3>
+              <ul style="color: #6b7280; font-size: 14px; margin: 0; padding-left: 20px; line-height: 1.5;">
+                <li>Vérifiez vos <strong>spams/indésirables</strong></li>
+                <li>Ajoutez hello@dodomove.fr à vos contacts</li>
+                <li>Si problème persiste, contactez-nous</li>
+              </ul>
+            </div>
+            
+            <p style="color: #6b7280; font-size: 14px; text-align: center; margin: 30px 0 0 0; line-height: 1.5;">
+              Nous sommes là pour faciliter vos expéditions entre la France et les DOM-TOM.<br>
+              Merci de votre confiance ! 🙏
+            </p>
+          </div>
+          
+          <!-- Footer -->
+          <div style="background-color: #f8fafc; padding: 20px 30px; text-align: center; border-top: 1px solid #e2e8f0;">
+            <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+              DodoPartage • Groupage collaboratif DOM-TOM
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+      `
+    });
+
+    if (emailError) {
+      console.error('❌ Erreur Resend lors du rappel:', emailError);
+      return { success: false, error: emailError };
+    }
+
+    console.log('✅ Email de rappel envoyé:', emailData.id);
+    return { success: true, emailId: emailData.id };
+    
+  } catch (error) {
+    console.error('❌ Erreur lors de l\'envoi du rappel:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ========================================
 // SYSTÈME D'ALERTES EMAIL AUTOMATIQUES
 // ========================================
 
@@ -6434,6 +6561,221 @@ app.get('/api/partage/track-owner-email/:contactId', async (req, res) => {
         error: 'Erreur lors du tracking'
       });
     }
+  }
+});
+
+// ========================================
+// ENDPOINT RAPPEL VALIDATION ANNONCES
+// ========================================
+
+// Endpoint pour envoyer les rappels de validation (à appeler via cron job)
+app.post('/api/partage/send-validation-reminders', async (req, res) => {
+  console.log('POST /api/partage/send-validation-reminders appelé');
+  
+  try {
+    // Utiliser la table DodoPartage
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
+    
+    // Calculer la date limite (24h ago)
+    const twentyFourHoursAgo = new Date(Date.now() - (24 * 60 * 60 * 1000));
+    const twentyFourHoursAgoISO = twentyFourHoursAgo.toISOString();
+    
+    console.log('🕐 Recherche des annonces créées avant:', twentyFourHoursAgoISO);
+    
+    // Rechercher les annonces qui :
+    // 1. Sont en status 'pending' (pas encore validées)
+    // 2. Ont été créées il y a plus de 24h
+    // 3. N'ont pas encore reçu de rappel (reminder_sent != true)
+    const pendingRecords = await base(partageTableId).select({
+      filterByFormula: `
+        AND(
+          {status} = 'pending',
+          DATETIME_DIFF(NOW(), {created_at}, 'hours') >= 24,
+          OR(
+            {reminder_sent} != TRUE(),
+            {reminder_sent} = BLANK()
+          )
+        )
+      `,
+      fields: [
+        'reference', 'created_at', 'status', 'contact_email', 'contact_first_name',
+        'validation_token', 'departure_city', 'departure_country', 
+        'arrival_city', 'arrival_country', 'request_type', 'reminder_sent'
+      ]
+    }).all();
+    
+    console.log(`📋 ${pendingRecords.length} annonce(s) en attente de rappel trouvée(s)`);
+    
+    if (pendingRecords.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'Aucune annonce nécessitant un rappel',
+        remindersSent: 0
+      });
+    }
+    
+    const results = [];
+    let successCount = 0;
+    let errorCount = 0;
+    
+    // Traiter chaque annonce une par une
+    for (const record of pendingRecords) {
+      const announcement = record.fields;
+      
+      console.log(`📧 Traitement rappel pour: ${announcement.contact_email} (${announcement.reference})`);
+      
+      try {
+        // Envoyer l'email de rappel
+        const emailResult = await sendValidationReminderEmail(record);
+        
+        if (emailResult.success) {
+          // Marquer le rappel comme envoyé dans Airtable
+          try {
+            await base(partageTableId).update([{
+              id: record.id,
+              fields: {
+                reminder_sent: true,
+                reminder_sent_at: new Date().toISOString()
+              }
+            }]);
+            
+            console.log(`✅ Rappel envoyé et marqué pour: ${announcement.contact_email}`);
+            successCount++;
+            
+            results.push({
+              reference: announcement.reference,
+              email: announcement.contact_email,
+              status: 'success',
+              emailId: emailResult.emailId
+            });
+            
+          } catch (updateError) {
+            console.error(`❌ Erreur mise à jour Airtable pour ${announcement.reference}:`, updateError);
+            // On continue même si la mise à jour échoue
+            results.push({
+              reference: announcement.reference,
+              email: announcement.contact_email,
+              status: 'email_sent_update_failed',
+              emailId: emailResult.emailId,
+              error: updateError.message
+            });
+            successCount++; // L'email a bien été envoyé
+          }
+          
+        } else {
+          console.error(`❌ Erreur envoi email pour ${announcement.reference}:`, emailResult.error);
+          errorCount++;
+          
+          results.push({
+            reference: announcement.reference,
+            email: announcement.contact_email,
+            status: 'email_failed',
+            error: emailResult.error
+          });
+        }
+        
+        // Attendre un peu entre chaque envoi pour éviter la surcharge
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+      } catch (error) {
+        console.error(`❌ Erreur traitement ${announcement.reference}:`, error);
+        errorCount++;
+        
+        results.push({
+          reference: announcement.reference,
+          email: announcement.contact_email,
+          status: 'processing_failed',
+          error: error.message
+        });
+      }
+    }
+    
+    console.log(`✅ Rappels terminés: ${successCount} succès, ${errorCount} erreurs`);
+    
+    res.status(200).json({
+      success: true,
+      message: `Rappels de validation traités`,
+      remindersSent: successCount,
+      errors: errorCount,
+      totalProcessed: pendingRecords.length,
+      details: results
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur lors du traitement des rappels:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors du traitement des rappels',
+      message: error.message
+    });
+  }
+});
+
+// Endpoint pour tester un rappel sur une annonce spécifique
+app.post('/api/partage/test-reminder', async (req, res) => {
+  console.log('POST /api/partage/test-reminder appelé');
+  
+  try {
+    const { reference } = req.body;
+    
+    if (!reference) {
+      return res.status(400).json({
+        success: false,
+        error: 'Référence d\'annonce requise'
+      });
+    }
+    
+    // Rechercher l'annonce par référence
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
+    
+    const records = await base(partageTableId).select({
+      filterByFormula: `{reference} = '${reference}'`,
+      maxRecords: 1
+    }).firstPage();
+    
+    if (records.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Annonce non trouvée'
+      });
+    }
+    
+    const record = records[0];
+    const announcement = record.fields;
+    
+    console.log(`🧪 Test rappel pour: ${announcement.contact_email} (${reference})`);
+    
+    // Envoyer l'email de rappel
+    const emailResult = await sendValidationReminderEmail(record);
+    
+    if (emailResult.success) {
+      console.log(`✅ Email de test envoyé à: ${announcement.contact_email}`);
+      
+      res.status(200).json({
+        success: true,
+        message: 'Email de rappel test envoyé avec succès',
+        details: {
+          reference: reference,
+          email: announcement.contact_email,
+          emailId: emailResult.emailId,
+          status: announcement.status
+        }
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: 'Erreur lors de l\'envoi du rappel test',
+        details: emailResult.error
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Erreur lors du test de rappel:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors du test de rappel',
+      message: error.message
+    });
   }
 });
 
