@@ -4530,16 +4530,18 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
   }
 });
 
-// Route de test pour visualiser l'email de validation DodoPartage
-app.get('/test-email-validation', async (req, res) => {
-  console.log('GET /test-email-validation appelé');
+// Route de test pour mail-tester.com (score délivrabilité)
+app.get('/test-mail-tester', async (req, res) => {
+  console.log('GET /test-mail-tester appelé pour tester la délivrabilité');
   
   try {
-    // Données de test
+    const testEmail = req.query.email || 'test-9lbwa5zcm@srv1.mail-tester.com';
+    
+    // Données de test réalistes
     const testData = {
       contact: {
-        firstName: 'Pierre',
-        email: 'bost.analytics@gmail.com'
+        firstName: 'TestUser',
+        email: testEmail
       },
       departure: {
         displayName: 'France (Paris)'
@@ -4549,18 +4551,18 @@ app.get('/test-email-validation', async (req, res) => {
       }
     };
     
-    const testValidationToken = 'test-token-' + Date.now();
+    const testValidationToken = 'mail-tester-' + Date.now();
     const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://www.dodomove.fr/partage';
     const validationUrl = `${frontendUrl}/validating/${testValidationToken}`;
     
-    console.log('📧 Envoi de l\'email de test...');
+    console.log('📧 Envoi vers mail-tester.com:', testEmail);
     
     const { data: emailData, error: emailError } = await resend.emails.send({
       from: 'DodoPartage <hello@dodomove.fr>',
-      to: ['bost.analytics@gmail.com'],
-      subject: '🚨 [TEST] Confirmez votre annonce DodoPartage',
+      to: [testEmail],
+      subject: 'Confirmez votre annonce DodoPartage',
       headers: {
-        'X-Entity-Ref-ID': `dodopartage-test-${testValidationToken}`
+        'X-Entity-Ref-ID': `dodopartage-mail-tester-${testValidationToken}`
       },
       html: `
       <!DOCTYPE html>
@@ -4675,13 +4677,15 @@ app.get('/test-email-validation', async (req, res) => {
       });
     }
 
-    console.log('✅ Email de test envoyé avec succès:', emailData.id);
+    console.log('✅ Email mail-tester envoyé avec succès:', emailData.id);
     
     res.status(200).json({
       success: true,
-      message: 'Email de test envoyé à bost.analytics@gmail.com',
+      message: `Email de test délivrabilité envoyé à ${testEmail}`,
       emailId: emailData.id,
-      testToken: testValidationToken
+      testToken: testValidationToken,
+      mailTesterUrl: 'https://www.mail-tester.com',
+      instructions: 'Retournez sur mail-tester.com et cliquez sur "Ensuite, vérifiez votre score"'
     });
 
   } catch (error) {
@@ -4690,6 +4694,43 @@ app.get('/test-email-validation', async (req, res) => {
       success: false,
       error: 'Erreur lors de l\'envoi du test',
       details: error.message
+    });
+  }
+});
+
+// Route de test pour développeur (email personnel)
+app.get('/test-email-validation', async (req, res) => {
+  console.log('GET /test-email-validation appelé');
+  
+  try {
+    const testValidationToken = 'dev-test-' + Date.now();
+    const frontendUrl = process.env.DODO_PARTAGE_FRONTEND_URL || 'https://www.dodomove.fr/partage';
+    
+    const { data: emailData, error: emailError } = await resend.emails.send({
+      from: 'DodoPartage <hello@dodomove.fr>',
+      to: ['bost.analytics@gmail.com'],
+      subject: '🚨 [DEV TEST] Confirmez votre annonce DodoPartage',
+      headers: {
+        'X-Entity-Ref-ID': `dodopartage-dev-test-${testValidationToken}`
+      },
+      html: `<h1>Test développeur DodoPartage</h1><p>Email de validation fonctionnel !</p>`
+    });
+
+    if (emailError) {
+      throw emailError;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Email de dev test envoyé à bost.analytics@gmail.com',
+      emailId: emailData.id
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur test dev:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
