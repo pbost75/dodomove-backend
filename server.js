@@ -279,6 +279,105 @@ function generateEmailUrl(contactEmail, requestType, announcementData, contactNa
   return emailUrl;
 }
 
+// 🚀 NOUVELLE FONCTION : Génère un bouton email intelligent avec détection de client
+function generateSmartEmailButton(contactRecordId, emailUrl, backendUrl) {
+  const buttonId = `smartEmailBtn_${contactRecordId}`;
+  const trackingUrl = `${backendUrl}/api/partage/track-owner-email/${contactRecordId}`;
+  
+  return `
+    <!-- Bouton Email Intelligent (avec détection automatique du client) -->
+    <a id="${buttonId}" href="#" 
+       onclick="handleSmartEmailClick('${encodeURIComponent(emailUrl)}', '${trackingUrl}'); return false;"
+       style="display: inline-block; background-color: #F17A69; color: white; padding: 16px 32px; 
+              text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; 
+              box-shadow: 0 4px 12px rgba(241, 122, 105, 0.3); margin: 0 8px 10px 0; min-width: 180px; text-align: center;">
+       📧 Répondre par email
+    </a>
+    
+    <script>
+    function handleSmartEmailClick(originalEmailUrl, trackingUrl) {
+      // 🔍 Détection intelligente du client email
+      const hostname = window.location.hostname.toLowerCase();
+      const userAgent = navigator.userAgent.toLowerCase();
+      
+      console.log('🕵️ Détection client email - hostname:', hostname);
+      
+      // Décoder l'URL email originale pour extraire les paramètres
+      const decodedUrl = decodeURIComponent(originalEmailUrl);
+      const emailMatch = decodedUrl.match(/mailto:([^?]+)/);
+      const subjectMatch = decodedUrl.match(/subject=([^&]+)/);
+      const bodyMatch = decodedUrl.match(/body=(.+)$/);
+      
+      if (!emailMatch) {
+        console.warn('❌ Impossible d\\'extraire l\\'email de:', decodedUrl);
+        window.location.href = decodedUrl;
+        return;
+      }
+      
+      const email = emailMatch[1];
+      const subject = subjectMatch ? decodeURIComponent(subjectMatch[1]) : '';
+      const body = bodyMatch ? decodeURIComponent(bodyMatch[1]) : '';
+      
+      console.log('📧 Paramètres extraits:', { email: email.substring(0, 10) + '...', subject });
+      
+      let finalUrl = decodedUrl; // Fallback par défaut
+      
+      // 🎯 Détection Gmail Web
+      if (hostname.includes('mail.google.com') || hostname.includes('gmail.com')) {
+        console.log('✅ Gmail Web détecté');
+        const gmailUrl = 'https://mail.google.com/mail/?view=cm' +
+          '&to=' + encodeURIComponent(email) +
+          '&su=' + encodeURIComponent(subject) +
+          '&body=' + encodeURIComponent(body);
+        finalUrl = gmailUrl;
+      }
+      // 🎯 Détection Outlook Web
+      else if (hostname.includes('outlook.live.com') || hostname.includes('outlook.office.com') || hostname.includes('outlook.com')) {
+        console.log('✅ Outlook Web détecté');
+        const outlookUrl = 'https://outlook.live.com/mail/deeplink/compose' +
+          '?to=' + encodeURIComponent(email) +
+          '&subject=' + encodeURIComponent(subject) +
+          '&body=' + encodeURIComponent(body);
+        finalUrl = outlookUrl;
+      }
+      // 🎯 Détection Yahoo Mail Web  
+      else if (hostname.includes('mail.yahoo.com')) {
+        console.log('✅ Yahoo Mail Web détecté');
+        const yahooUrl = 'https://compose.mail.yahoo.com/' +
+          '?to=' + encodeURIComponent(email) +
+          '&subject=' + encodeURIComponent(subject) +
+          '&body=' + encodeURIComponent(body);
+        finalUrl = yahooUrl;
+      }
+      // 🎯 Fallback : mailto classique
+      else {
+        console.log('🔄 Fallback mailto pour hostname:', hostname);
+        finalUrl = decodedUrl;
+      }
+      
+      // 📊 Envoyer le tracking avec l'URL finale
+      try {
+        fetch(trackingUrl + '?emailUrl=' + encodeURIComponent(finalUrl), {
+          method: 'GET',
+          mode: 'no-cors'
+        }).catch(err => console.log('📊 Tracking envoyé (erreur normale en no-cors)'));
+      } catch (err) {
+        console.log('📊 Tracking error (normal):', err.message);
+      }
+      
+      // 🚀 Ouvrir l'email dans le bon client
+      if (finalUrl.startsWith('mailto:')) {
+        window.location.href = finalUrl;
+      } else {
+        window.open(finalUrl, '_blank');
+      }
+      
+      console.log('🎯 Email ouvert dans:', finalUrl.startsWith('mailto:') ? 'Application locale' : 'Client web');
+    }
+    </script>
+  `;
+}
+
 // ========================================
 // FONCTION EMAIL DE RAPPEL VALIDATION
 // ========================================
@@ -4558,12 +4657,7 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
                 ` : ''}
                 
                 <!-- Bouton Email (avec tracking automatique et message personnalisé) -->
-                <a href="${process.env.BACKEND_URL || 'https://web-production-7b738.up.railway.app'}/api/partage/track-owner-email/${contactRecordId}?emailUrl=${encodeURIComponent(emailUrl)}" 
-                   style="display: inline-block; background-color: #F17A69; color: white; padding: 16px 32px; 
-                          text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; 
-                          box-shadow: 0 4px 12px rgba(241, 122, 105, 0.3); margin: 0 8px 10px 0; min-width: 180px; text-align: center;">
-                   📧 Répondre par email
-                </a>
+                ${generateSmartEmailButton(contactRecordId, emailUrl, process.env.BACKEND_URL || 'https://web-production-7b738.up.railway.app')}
               </div>
               
               <p style="color: #64748b; font-size: 14px; text-align: center; margin: 30px 0 0 0;">
@@ -4793,7 +4887,7 @@ app.get('/test-mail-tester', async (req, res) => {
         </div>
       </body>
       </html>
-      `,
+      `
     });
 
     if (emailError) {
