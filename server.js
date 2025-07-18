@@ -262,119 +262,66 @@ function generateWhatsAppUrl(phoneNumber, requestType, announcementData, contact
   return whatsappUrl;
 }
 
-// Fonction helper pour générer une URL Email avec message pré-rempli
+// Fonction helper pour générer une URL Email avec message pré-rempli amélioré
 function generateEmailUrl(contactEmail, requestType, announcementData, contactName, reference) {
   if (!contactEmail) return null;
   
-  // Générer le message personnalisé (même que WhatsApp)
-  const message = generatePersonalizedMessage(requestType, announcementData, contactName);
+  // Extraire les informations clés
+  const authorName = announcementData.contact_first_name || 'Bonjour';
+  const arrivalCity = announcementData.arrival_city || '';
+  const arrivalCountry = announcementData.arrival_country || '';
   
-  // Encoder le message pour URL (remplacer les sauts de ligne par %0A)
-  const encodedMessage = encodeURIComponent(message.replace(/\n/g, '\n'));
+  // Destination claire
+  let destination = arrivalCountry;
+  if (arrivalCity && arrivalCity !== arrivalCountry) {
+    destination = `${arrivalCity} (${arrivalCountry})`;
+  }
   
-  // Créer l'URL Email avec sujet et corps personnalisés
-  const emailUrl = `mailto:${contactEmail}?subject=Re: ${reference} - DodoPartage&body=${encodedMessage}`;
+  // Sujet amélioré plus clair
+  const subject = `Re: ${reference} - Partage conteneur vers ${destination}`;
   
-  console.log('📧 URL Email générée pour:', contactEmail);
+  // Message structuré et professionnel
+  const message = `Bonjour ${contactName},
+
+Merci pour votre message concernant mon annonce de partage de conteneur (réf: ${reference}).
+
+Je reviens vers vous concernant votre ${requestType === 'offer' ? 'proposition' : 'demande'} pour ${destination}.
+
+Pouvez-vous me donner plus de détails sur :
+- Vos dates de disponibilité
+- Le volume approximatif de vos affaires
+- Votre localisation de départ
+
+Je reste à votre disposition pour échanger.
+
+Cordialement,
+${authorName}
+
+---
+Référence : ${reference}
+Via DodoPartage.fr`;
+  
+  // Encoder proprement pour URL
+  const encodedSubject = encodeURIComponent(subject);
+  const encodedMessage = encodeURIComponent(message);
+  
+  // Créer l'URL Email optimisée
+  const emailUrl = `mailto:${contactEmail}?subject=${encodedSubject}&body=${encodedMessage}`;
+  
+  console.log('📧 URL Email améliorée générée pour:', contactEmail);
   return emailUrl;
 }
 
-// 🚀 NOUVELLE FONCTION : Génère un bouton email intelligent avec détection de client
-function generateSmartEmailButton(contactRecordId, emailUrl, backendUrl) {
-  const buttonId = `smartEmailBtn_${contactRecordId}`;
-  const trackingUrl = `${backendUrl}/api/partage/track-owner-email/${contactRecordId}`;
-  
+// Fonction helper pour générer un mailto: amélioré avec meilleur pré-remplissage
+function generateEnhancedEmailButton(contactRecordId, emailUrl, backendUrl) {
   return `
-    <!-- Bouton Email Intelligent (avec détection automatique du client) -->
-    <a id="${buttonId}" href="#" 
-       onclick="handleSmartEmailClick('${encodeURIComponent(emailUrl)}', '${trackingUrl}'); return false;"
+    <!-- Bouton Email Simple et Fiable (mailto: amélioré) -->
+    <a href="${backendUrl}/api/partage/track-owner-email/${contactRecordId}?emailUrl=${encodeURIComponent(emailUrl)}" 
        style="display: inline-block; background-color: #F17A69; color: white; padding: 16px 32px; 
               text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; 
               box-shadow: 0 4px 12px rgba(241, 122, 105, 0.3); margin: 0 8px 10px 0; min-width: 180px; text-align: center;">
        📧 Répondre par email
     </a>
-    
-    <script>
-    function handleSmartEmailClick(originalEmailUrl, trackingUrl) {
-      // 🔍 Détection intelligente du client email
-      const hostname = window.location.hostname.toLowerCase();
-      const userAgent = navigator.userAgent.toLowerCase();
-      
-      console.log('🕵️ Détection client email - hostname:', hostname);
-      
-      // Décoder l'URL email originale pour extraire les paramètres
-      const decodedUrl = decodeURIComponent(originalEmailUrl);
-      const emailMatch = decodedUrl.match(/mailto:([^?]+)/);
-      const subjectMatch = decodedUrl.match(/subject=([^&]+)/);
-      const bodyMatch = decodedUrl.match(/body=(.+)$/);
-      
-      if (!emailMatch) {
-        console.warn('❌ Impossible d\\'extraire l\\'email de:', decodedUrl);
-        window.location.href = decodedUrl;
-        return;
-      }
-      
-      const email = emailMatch[1];
-      const subject = subjectMatch ? decodeURIComponent(subjectMatch[1]) : '';
-      const body = bodyMatch ? decodeURIComponent(bodyMatch[1]) : '';
-      
-      console.log('📧 Paramètres extraits:', { email: email.substring(0, 10) + '...', subject });
-      
-      let finalUrl = decodedUrl; // Fallback par défaut
-      
-      // 🎯 Détection Gmail Web
-      if (hostname.includes('mail.google.com') || hostname.includes('gmail.com')) {
-        console.log('✅ Gmail Web détecté');
-        const gmailUrl = 'https://mail.google.com/mail/?view=cm' +
-          '&to=' + encodeURIComponent(email) +
-          '&su=' + encodeURIComponent(subject) +
-          '&body=' + encodeURIComponent(body);
-        finalUrl = gmailUrl;
-      }
-      // 🎯 Détection Outlook Web
-      else if (hostname.includes('outlook.live.com') || hostname.includes('outlook.office.com') || hostname.includes('outlook.com')) {
-        console.log('✅ Outlook Web détecté');
-        const outlookUrl = 'https://outlook.live.com/mail/deeplink/compose' +
-          '?to=' + encodeURIComponent(email) +
-          '&subject=' + encodeURIComponent(subject) +
-          '&body=' + encodeURIComponent(body);
-        finalUrl = outlookUrl;
-      }
-      // 🎯 Détection Yahoo Mail Web  
-      else if (hostname.includes('mail.yahoo.com')) {
-        console.log('✅ Yahoo Mail Web détecté');
-        const yahooUrl = 'https://compose.mail.yahoo.com/' +
-          '?to=' + encodeURIComponent(email) +
-          '&subject=' + encodeURIComponent(subject) +
-          '&body=' + encodeURIComponent(body);
-        finalUrl = yahooUrl;
-      }
-      // 🎯 Fallback : mailto classique
-      else {
-        console.log('🔄 Fallback mailto pour hostname:', hostname);
-        finalUrl = decodedUrl;
-      }
-      
-      // 📊 Envoyer le tracking avec l'URL finale
-      try {
-        fetch(trackingUrl + '?emailUrl=' + encodeURIComponent(finalUrl), {
-          method: 'GET',
-          mode: 'no-cors'
-        }).catch(err => console.log('📊 Tracking envoyé (erreur normale en no-cors)'));
-      } catch (err) {
-        console.log('📊 Tracking error (normal):', err.message);
-      }
-      
-      // 🚀 Ouvrir l'email dans le bon client
-      if (finalUrl.startsWith('mailto:')) {
-        window.location.href = finalUrl;
-      } else {
-        window.open(finalUrl, '_blank');
-      }
-      
-      console.log('🎯 Email ouvert dans:', finalUrl.startsWith('mailto:') ? 'Application locale' : 'Client web');
-    }
-    </script>
   `;
 }
 
@@ -4657,7 +4604,7 @@ app.post('/api/partage/contact-announcement', async (req, res) => {
                 ` : ''}
                 
                 <!-- Bouton Email (avec tracking automatique et message personnalisé) -->
-                ${generateSmartEmailButton(contactRecordId, emailUrl, process.env.BACKEND_URL || 'https://web-production-7b738.up.railway.app')}
+                ${generateEnhancedEmailButton(contactRecordId, emailUrl, process.env.BACKEND_URL || 'https://web-production-7b738.up.railway.app')}
               </div>
               
               <p style="color: #64748b; font-size: 14px; text-align: center; margin: 30px 0 0 0;">
