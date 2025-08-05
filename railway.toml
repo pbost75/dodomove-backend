@@ -1,10 +1,10 @@
 [build]
 builder = "nixpacks"
 buildCommand = "npm install"
-watchPatterns = ["/server-debug.js", "/package.json"]
+watchPatterns = ["/server.js", "/package.json"]
 
 [deploy]
-startCommand = "node server-debug.js"
+startCommand = "node server.js"
 healthcheckPath = "/"
 healthcheckTimeout = 60
 restartPolicyType = "on_failure"
