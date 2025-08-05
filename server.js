@@ -262,53 +262,20 @@ function generateWhatsAppUrl(phoneNumber, requestType, announcementData, contact
   return whatsappUrl;
 }
 
-// Fonction helper pour générer une URL Email avec message pré-rempli amélioré
+// Fonction helper pour générer une URL Email avec message pré-rempli
 function generateEmailUrl(contactEmail, requestType, announcementData, contactName, reference) {
   if (!contactEmail) return null;
   
-  // Extraire les informations clés
-  const authorName = announcementData.contact_first_name || 'Bonjour';
-  const arrivalCity = announcementData.arrival_city || '';
-  const arrivalCountry = announcementData.arrival_country || '';
+  // Générer le message personnalisé simple (même que WhatsApp)
+  const message = generatePersonalizedMessage(requestType, announcementData, contactName);
   
-  // Destination claire
-  let destination = arrivalCountry;
-  if (arrivalCity && arrivalCity !== arrivalCountry) {
-    destination = `${arrivalCity} (${arrivalCountry})`;
-  }
+  // Encoder le message pour URL (remplacer les sauts de ligne par %0A)
+  const encodedMessage = encodeURIComponent(message.replace(/\n/g, '\n'));
   
-  // Sujet amélioré plus clair
-  const subject = `Re: ${reference} - Partage conteneur vers ${destination}`;
+  // Créer l'URL Email avec sujet et corps personnalisés
+  const emailUrl = `mailto:${contactEmail}?subject=Re: ${reference} - DodoPartage&body=${encodedMessage}`;
   
-  // Message structuré et professionnel
-  const message = `Bonjour ${contactName},
-
-Merci pour votre message concernant mon annonce de partage de conteneur (réf: ${reference}).
-
-Je reviens vers vous concernant votre ${requestType === 'offer' ? 'proposition' : 'demande'} pour ${destination}.
-
-Pouvez-vous me donner plus de détails sur :
-- Vos dates de disponibilité
-- Le volume approximatif de vos affaires
-- Votre localisation de départ
-
-Je reste à votre disposition pour échanger.
-
-Cordialement,
-${authorName}
-
----
-Référence : ${reference}
-Via DodoPartage.fr`;
-  
-  // Encoder proprement pour URL
-  const encodedSubject = encodeURIComponent(subject);
-  const encodedMessage = encodeURIComponent(message);
-  
-  // Créer l'URL Email optimisée
-  const emailUrl = `mailto:${contactEmail}?subject=${encodedSubject}&body=${encodedMessage}`;
-  
-  console.log('📧 URL Email améliorée générée pour:', contactEmail);
+  console.log('📧 URL Email générée pour:', contactEmail);
   return emailUrl;
 }
 
