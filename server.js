@@ -6,6 +6,9 @@ const { Resend } = require('resend');
 const Airtable = require('airtable');
 const crypto = require('crypto');
 
+// 🚀 OPTIMISATION: Import Redis pour le cache
+const redis = require('redis');
+
 // Log toutes les variables d'environnement au démarrage
 console.log('=== Variables d\'environnement ===');
 console.log('NODE_ENV:', process.env.NODE_ENV);
@@ -15,6 +18,83 @@ console.log('AIRTABLE_API_KEY existe:', !!process.env.AIRTABLE_API_KEY);
 console.log('AIRTABLE_BASE_ID existe:', !!process.env.AIRTABLE_BASE_ID);
 console.log('RESEND_API_KEY existe:', !!process.env.RESEND_API_KEY);
 console.log('FRONTEND_URL:', process.env.FRONTEND_URL);
+
+// 🚀 OPTIMISATION: Configuration Redis
+let redisClient = null;
+const initRedis = async () => {
+  try {
+    // Railway Redis ou local
+    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+    console.log('🔄 Connexion à Redis:', redisUrl.replace(/redis:\/\/.*@/, 'redis://***@'));
+    
+    redisClient = redis.createClient({
+      url: redisUrl,
+      socket: {
+        connectTimeout: 5000,
+        lazyConnect: true,
+      },
+      retry_strategy: (options) => {
+        console.log('🔄 Redis retry:', options.attempt);
+        if (options.attempt > 3) {
+          console.log('❌ Redis: Abandon après 3 tentatives');
+          return null; // Arrêter les tentatives
+        }
+        return Math.min(options.attempt * 100, 3000);
+      }
+    });
+
+    redisClient.on('error', (err) => {
+      console.log('❌ Redis Error:', err.message);
+      redisClient = null; // Désactiver Redis en cas d'erreur
+    });
+
+    redisClient.on('connect', () => {
+      console.log('✅ Redis connecté avec succès');
+    });
+
+    redisClient.on('ready', () => {
+      console.log('✅ Redis prêt à utiliser');
+    });
+
+    await redisClient.connect();
+  } catch (error) {
+    console.log('⚠️ Redis non disponible, continuons sans cache:', error.message);
+    redisClient = null;
+  }
+};
+
+// Initialiser Redis de manière asynchrone
+initRedis();
+
+// Fonction helper pour le cache
+const getCacheKey = (prefix, params) => {
+  const sortedParams = Object.keys(params).sort().reduce((result, key) => {
+    result[key] = params[key];
+    return result;
+  }, {});
+  return `${prefix}:${Buffer.from(JSON.stringify(sortedParams)).toString('base64')}`;
+};
+
+const getFromCache = async (key) => {
+  if (!redisClient) return null;
+  try {
+    const cached = await redisClient.get(key);
+    return cached ? JSON.parse(cached) : null;
+  } catch (error) {
+    console.log('⚠️ Erreur lecture cache:', error.message);
+    return null;
+  }
+};
+
+const setToCache = async (key, data, ttlSeconds = 300) => {
+  if (!redisClient) return;
+  try {
+    await redisClient.setEx(key, ttlSeconds, JSON.stringify(data));
+    console.log(`💾 Cache mis à jour: ${key} (TTL: ${ttlSeconds}s)`);
+  } catch (error) {
+    console.log('⚠️ Erreur écriture cache:', error.message);
+  }
+};
 
 const express = require('express');
 const cors = require('cors');
@@ -3419,6 +3499,22 @@ app.get('/api/partage/get-announcements', async (req, res) => {
       type, departure, arrival, volumeMin, volumeMax, periods, status
     });
 
+    // 🚀 OPTIMISATION: Vérifier le cache Redis d'abord
+    const cacheKey = getCacheKey('announcements', req.query);
+    const cachedResult = await getFromCache(cacheKey);
+    if (cachedResult) {
+      console.log('💨 Cache hit! Retour des données depuis Redis');
+      return res.status(200).json({
+        ...cachedResult,
+        backend: {
+          ...cachedResult.backend,
+          cached: true,
+          cacheHit: true
+        }
+      });
+    }
+    console.log('💾 Cache miss, récupération depuis Airtable...');
+
     // Vérifier les variables d'environnement
     const hasAirtableConfig = !!(process.env.AIRTABLE_API_KEY && process.env.AIRTABLE_BASE_ID);
     if (!hasAirtableConfig) {
@@ -3719,8 +3815,8 @@ app.get('/api/partage/get-announcements', async (req, res) => {
 
     console.log('📊 Statistiques des annonces:', stats);
 
-    // Réponse de succès
-    res.status(200).json({
+    // Préparer la réponse
+    const response = {
       success: true,
       data: filteredAnnouncements,
       message: `${filteredAnnouncements.length} annonce${filteredAnnouncements.length > 1 ? 's' : ''} trouvée${filteredAnnouncements.length > 1 ? 's' : ''}`,
@@ -3733,9 +3829,16 @@ app.get('/api/partage/get-announcements', async (req, res) => {
       backend: {
         source: 'airtable',
         table: partageTableId,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        cached: false
       }
-    });
+    };
+
+    // 🚀 OPTIMISATION: Mettre en cache pour 5 minutes
+    await setToCache(cacheKey, response, 300);
+
+    // Réponse de succès
+    res.status(200).json(response);
 
   } catch (error) {
     console.error('❌ Erreur lors de la récupération des annonces:', error);
@@ -3747,6 +3850,162 @@ app.get('/api/partage/get-announcements', async (req, res) => {
       details: error.message,
       data: [], // Retourner un tableau vide en cas d'erreur
       total: 0,
+      backend: {
+        source: 'airtable',
+        timestamp: new Date().toISOString(),
+        error: true
+      }
+    });
+  }
+});
+
+// 🚀 OPTIMISATION: Route pour récupérer UNE SEULE annonce par ID/référence
+app.get('/api/partage/get-announcement/:id', async (req, res) => {
+  console.log('GET /api/partage/get-announcement appelé avec ID:', req.params.id);
+  
+  try {
+    const announcementId = req.params.id;
+    
+    if (!announcementId) {
+      return res.status(400).json({
+        success: false,
+        error: 'ID d\'annonce manquant'
+      });
+    }
+
+    // 🚀 OPTIMISATION: Vérifier le cache d'abord
+    const cacheKey = getCacheKey('announcement', { id: announcementId });
+    const cachedResult = await getFromCache(cacheKey);
+    if (cachedResult) {
+      console.log('💨 Cache hit pour annonce spécifique!');
+      return res.status(200).json({
+        ...cachedResult,
+        backend: {
+          ...cachedResult.backend,
+          cached: true,
+          cacheHit: true
+        }
+      });
+    }
+    console.log('💾 Cache miss, récupération annonce depuis Airtable...');
+
+    // Vérifier les variables d'environnement
+    const hasAirtableConfig = !!(process.env.AIRTABLE_API_KEY && process.env.AIRTABLE_BASE_ID);
+    if (!hasAirtableConfig) {
+      console.error('❌ Configuration Airtable manquante');
+      return res.status(500).json({
+        success: false,
+        error: 'Configuration base de données manquante'
+      });
+    }
+
+    const partageTableId = process.env.AIRTABLE_PARTAGE_TABLE_ID || 'tbleQhqlXzWrzToit';
+    console.log('📋 Recherche annonce dans la table:', partageTableId);
+
+    // 🎯 OPTIMISATION: Requête Airtable spécifique pour UNE annonce
+    const records = await base(partageTableId).select({
+      filterByFormula: `OR({reference} = '${announcementId}', RECORD_ID() = '${announcementId}')`,
+      maxRecords: 1
+    }).all();
+
+    if (records.length === 0) {
+      console.log('❌ Annonce non trouvée:', announcementId);
+      return res.status(404).json({
+        success: false,
+        error: 'Annonce non trouvée',
+        message: 'Cette annonce n\'existe pas ou n\'est plus disponible'
+      });
+    }
+
+    const record = records[0];
+    const fields = record.fields;
+    
+    // Transformation identique à la route principale
+    const isSearchRequest = fields.request_type === 'search';
+    
+    const baseAnnouncement = {
+      id: record.id,
+      reference: fields.reference || '',
+      status: fields.status || 'pending_validation',
+      created_at: fields.created_at || new Date().toISOString(),
+      expires_at: fields.expires_at || null,
+      expired_at: fields.expired_at || null,
+      contact_first_name: fields.contact_first_name || '',
+      contact_email: fields.contact_email || '',
+      contact_phone: fields.contact_phone || '',
+      departure_country: fields.departure_country || '',
+      departure_city: fields.departure_city || '',
+      departure_postal_code: fields.departure_postal_code || '',
+      arrival_country: fields.arrival_country || '',
+      arrival_city: fields.arrival_city || '',
+      arrival_postal_code: fields.arrival_postal_code || '',
+      announcement_text: fields.announcement_text || '',
+      announcement_text_length: fields.announcement_text_length || 0,
+      request_type: fields.request_type || 'offer'
+    };
+    
+    let announcement;
+    if (isSearchRequest) {
+      announcement = {
+        ...baseAnnouncement,
+        volume_needed: fields.volume_needed || 0,
+        accepts_fees: fields.accepts_fees || false,
+        shipping_period_start: fields.shipping_period_start || '',
+        shipping_period_end: fields.shipping_period_end || '',
+        shipping_period_formatted: fields.shipping_period_formatted || 'Période flexible',
+        shipping_date: '',
+        shipping_date_formatted: '',
+        container_type: '',
+        container_available_volume: 0,
+        container_minimum_volume: 0,
+        offer_type: ''
+      };
+    } else {
+      announcement = {
+        ...baseAnnouncement,
+        shipping_date: fields.shipping_date || '',
+        shipping_date_formatted: fields.shipping_date_formatted || '',
+        container_type: fields.container_type || '20',
+        container_available_volume: fields.container_available_volume || 0,
+        container_minimum_volume: fields.container_minimum_volume || 0,
+        offer_type: fields.offer_type || 'free',
+        volume_needed: 0,
+        accepts_fees: false,
+        shipping_period_start: '',
+        shipping_period_end: '',
+        shipping_period_formatted: ''
+      };
+    }
+
+    console.log('✅ Annonce trouvée:', announcement.reference);
+
+    // Préparer la réponse
+    const response = {
+      success: true,
+      data: announcement,
+      message: 'Annonce récupérée avec succès',
+      backend: {
+        source: 'airtable',
+        table: partageTableId,
+        timestamp: new Date().toISOString(),
+        cached: false,
+        optimized: true // Marquer comme optimisé
+      }
+    };
+
+    // 🚀 OPTIMISATION: Cache plus long pour les annonces spécifiques (10 minutes)
+    await setToCache(cacheKey, response, 600);
+
+    res.status(200).json(response);
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération de l\'annonce:', error);
+    
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la récupération de l\'annonce',
+      message: 'Une erreur technique s\'est produite',
+      details: error.message,
       backend: {
         source: 'airtable',
         timestamp: new Date().toISOString(),
