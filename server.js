@@ -6,9 +6,6 @@ const { Resend } = require('resend');
 const Airtable = require('airtable');
 const crypto = require('crypto');
 
-// 🚀 OPTIMISATION: Import Redis pour le cache
-const redis = require('redis');
-
 // Log toutes les variables d'environnement au démarrage
 console.log('=== Variables d\'environnement ===');
 console.log('NODE_ENV:', process.env.NODE_ENV);
@@ -19,52 +16,11 @@ console.log('AIRTABLE_BASE_ID existe:', !!process.env.AIRTABLE_BASE_ID);
 console.log('RESEND_API_KEY existe:', !!process.env.RESEND_API_KEY);
 console.log('FRONTEND_URL:', process.env.FRONTEND_URL);
 
-// 🚀 OPTIMISATION: Configuration Redis
-let redisClient = null;
-const initRedis = async () => {
-  try {
-    // Railway Redis ou local
-    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-    console.log('🔄 Connexion à Redis:', redisUrl.replace(/redis:\/\/.*@/, 'redis://***@'));
-    
-    redisClient = redis.createClient({
-      url: redisUrl,
-      socket: {
-        connectTimeout: 5000,
-        lazyConnect: true,
-      },
-      retry_strategy: (options) => {
-        console.log('🔄 Redis retry:', options.attempt);
-        if (options.attempt > 3) {
-          console.log('❌ Redis: Abandon après 3 tentatives');
-          return null; // Arrêter les tentatives
-        }
-        return Math.min(options.attempt * 100, 3000);
-      }
-    });
+// 🚀 OPTIMISATION: Cache en mémoire simple (sans Redis pour commencer)
+const memoryCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes en millisecondes
 
-    redisClient.on('error', (err) => {
-      console.log('❌ Redis Error:', err.message);
-      redisClient = null; // Désactiver Redis en cas d'erreur
-    });
-
-    redisClient.on('connect', () => {
-      console.log('✅ Redis connecté avec succès');
-    });
-
-    redisClient.on('ready', () => {
-      console.log('✅ Redis prêt à utiliser');
-    });
-
-    await redisClient.connect();
-  } catch (error) {
-    console.log('⚠️ Redis non disponible, continuons sans cache:', error.message);
-    redisClient = null;
-  }
-};
-
-// Initialiser Redis de manière asynchrone
-initRedis();
+console.log('💾 Initialisation du cache mémoire simple (pas de Redis pour le moment)');
 
 // Fonction helper pour le cache
 const getCacheKey = (prefix, params) => {
@@ -76,23 +32,41 @@ const getCacheKey = (prefix, params) => {
 };
 
 const getFromCache = async (key) => {
-  if (!redisClient) return null;
   try {
-    const cached = await redisClient.get(key);
-    return cached ? JSON.parse(cached) : null;
+    const cached = memoryCache.get(key);
+    if (!cached) return null;
+    
+    // Vérifier expiration
+    if (Date.now() > cached.expires) {
+      memoryCache.delete(key);
+      return null;
+    }
+    
+    console.log(`💨 Cache hit mémoire: ${key}`);
+    return cached.data;
   } catch (error) {
-    console.log('⚠️ Erreur lecture cache:', error.message);
+    console.log('⚠️ Erreur lecture cache mémoire:', error.message);
     return null;
   }
 };
 
 const setToCache = async (key, data, ttlSeconds = 300) => {
-  if (!redisClient) return;
   try {
-    await redisClient.setEx(key, ttlSeconds, JSON.stringify(data));
-    console.log(`💾 Cache mis à jour: ${key} (TTL: ${ttlSeconds}s)`);
+    const expires = Date.now() + (ttlSeconds * 1000);
+    memoryCache.set(key, { data, expires });
+    console.log(`💾 Cache mémoire mis à jour: ${key} (TTL: ${ttlSeconds}s)`);
+    
+    // Nettoyage périodique du cache (éviter les fuites mémoire)
+    if (memoryCache.size > 1000) {
+      const now = Date.now();
+      for (const [cacheKey, cached] of memoryCache.entries()) {
+        if (now > cached.expires) {
+          memoryCache.delete(cacheKey);
+        }
+      }
+    }
   } catch (error) {
-    console.log('⚠️ Erreur écriture cache:', error.message);
+    console.log('⚠️ Erreur écriture cache mémoire:', error.message);
   }
 };
 
