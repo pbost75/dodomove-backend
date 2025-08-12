@@ -13,16 +13,19 @@ const router = express.Router();
 // Configuration OpenAI
 let openai;
 try {
-  if (!process.env.OPENAI_API_KEY) {
-    console.log('⚠️ OPENAI_API_KEY non configurée - Routes DodoLens désactivées');
+  if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.trim() === '') {
+    console.log('⚠️ OPENAI_API_KEY non configurée - Routes DodoLens en mode dégradé');
+    openai = null;
   } else {
     openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
+      apiKey: process.env.OPENAI_API_KEY.trim()
     });
     console.log('✅ OpenAI SDK initialisé pour DodoLens');
   }
 } catch (error) {
   console.error('❌ Erreur initialisation OpenAI SDK:', error.message);
+  console.log('🔄 Routes DodoLens disponibles en mode dégradé');
+  openai = null;
 }
 
 // Rate limiting spécifique pour DodoLens
@@ -63,7 +66,11 @@ const requireOpenAI = (req, res, next) => {
   if (!openai) {
     return res.status(503).json({ 
       error: 'Service DodoLens temporairement indisponible',
-      details: 'Configuration OpenAI manquante'
+      details: 'Configuration OpenAI manquante - Contactez le support',
+      debug: {
+        hasEnvVar: !!process.env.OPENAI_API_KEY,
+        envVarLength: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.length : 0
+      }
     });
   }
   next();
@@ -350,15 +357,30 @@ router.get('/stats', async (req, res) => {
   try {
     // Statistiques simples du cache/logs
     const stats = {
-      uptime: process.uptime(),
+      service: 'DodoLens Routes',
+      status: openai ? 'operational' : 'degraded',
+      uptime: Math.round(process.uptime()),
       cache_size: global.dodoLensUsageCache ? global.dodoLensUsageCache.size : 0,
       timestamp: new Date().toISOString(),
-      openai_configured: !!process.env.OPENAI_API_KEY
+      openai: {
+        configured: !!process.env.OPENAI_API_KEY,
+        initialized: !!openai,
+        key_length: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.length : 0
+      },
+      routes: [
+        '/api/dodo-lens/analyze-vision',
+        '/api/dodo-lens/analyze-audio', 
+        '/api/dodo-lens/analyze-fusion',
+        '/api/dodo-lens/stats'
+      ]
     };
     
     res.json(stats);
   } catch (error) {
-    res.status(500).json({ error: 'Erreur récupération stats' });
+    res.status(500).json({ 
+      error: 'Erreur récupération stats',
+      details: error.message 
+    });
   }
 });
 
