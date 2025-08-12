@@ -102,6 +102,32 @@ router.post('/analyze-audio-raw', dodoLensLimiter, express.raw({type: 'audio/*',
       status: 'retry_later'
     });
   }
+  
+  // POLYFILL FILE GLOBAL pour route RAW (SOLUTION DÉFINITIVE)
+  if (!globalThis.File) {
+    try {
+      const { File } = await import('node:buffer');
+      globalThis.File = File;
+      console.log('✅ File global défini pour route RAW');
+    } catch (error) {
+      console.log('⚠️ node:buffer non disponible, polyfill custom...');
+      // Polyfill simple si node:buffer échoue
+      globalThis.File = class File {
+        constructor(parts, name, options = {}) {
+          this.name = name;
+          this.type = options.type || '';
+          this.buffer = Buffer.concat(parts.map(p => Buffer.from(p)));
+          this.size = this.buffer.length;
+        }
+        stream() {
+          const { Readable } = require('stream');
+          return Readable.from(this.buffer);
+        }
+      };
+      console.log('✅ File polyfill custom installé');
+    }
+  }
+  
   try {
     const startTime = Date.now();
     
