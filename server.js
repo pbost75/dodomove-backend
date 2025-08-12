@@ -1,4 +1,4 @@
-console.log('=== Dodomove backend: démarrage du serveur (WhatsApp URLs corrigées) ===');
+console.log('=== Dodomove backend: démarrage du serveur (WhatsApp URLs corrigées + DodoLens JSON fix) ===');
 require('dotenv').config();
 
 // Import des modules pour l'envoi d'emails et Airtable
