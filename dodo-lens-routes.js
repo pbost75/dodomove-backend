@@ -35,11 +35,8 @@ const dodoLensLimiter = rateLimit({
     contact: 'Support technique disponible si besoin'
   },
   standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    // Utiliser IP + User-Agent pour identifier uniquement
-    return hashIP(req.ip + (req.get('User-Agent') || ''));
-  }
+  legacyHeaders: false
+  // Pas de keyGenerator personnalisé = utilise req.ip par défaut (gère IPv6 correctement)
 });
 
 // Middleware upload pour audio (mémoire temporaire)
