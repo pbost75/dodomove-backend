@@ -95,6 +95,12 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
+// 🎬 DodoLens Routes - Sécurisation OpenAI
+console.log('🎬 Initialisation des routes DodoLens...');
+const dodoLensRoutes = require('./dodo-lens-routes');
+app.use('/api/dodo-lens', dodoLensRoutes);
+console.log('✅ Routes DodoLens activées sur /api/dodo-lens');
+
 // Health route spécifique pour Railway (/) - recommandée pour les healthchecks
 app.get('/', (req, res) => {
   console.log('GET / appelé (healthcheck)');
