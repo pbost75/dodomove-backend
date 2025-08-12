@@ -66,7 +66,8 @@ const dodoLensLimiter = rateLimit({
     contact: 'Support technique disponible si besoin'
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  trustProxy: true // FIX RAILWAY: Trust proxy headers pour X-Forwarded-For
   // Pas de keyGenerator personnalisé = utilise req.ip par défaut (gère IPv6 correctement)
 });
 
@@ -78,12 +79,10 @@ const upload = multer({
     files: 1
   },
   fileFilter: (req, file, cb) => {
-    // Accepter seulement audio/vidéo
-    if (file.mimetype.startsWith('audio/') || file.mimetype.startsWith('video/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Seuls les fichiers audio/vidéo sont acceptés'));
-    }
+    console.log('🔍 FileFilter - MIME reçu:', file.mimetype || 'undefined');
+    // MOBILE FIX: Accepter TOUS les fichiers car mobile peut envoyer MIME vide
+    // On validera le contenu côté OpenAI plutôt qu'ici
+    cb(null, true);
   }
 });
 
@@ -310,15 +309,21 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
     
     console.log('✅ File polyfill robuste installé');
     
-    // Logs détaillés du fichier reçu (sans slice qui ne marche pas sur Blob)
+    // Logs détaillés du fichier reçu (version ultra-sécurisée)
     console.log('📊 Analyse fichier reçu:', {
       fieldname: req.file.fieldname,
       originalname: req.file.originalname,
       mimetype: req.file.mimetype,
       size: req.file.size,
-      buffer_type: typeof req.file.buffer,
-      buffer_constructor: req.file.buffer.constructor.name
+      buffer_type: typeof req.file.buffer
     });
+    
+    // Log constructor séparé pour éviter crash
+    try {
+      console.log('🔍 Buffer constructor:', req.file.buffer.constructor.name);
+    } catch (e) {
+      console.log('⚠️ Impossible de lire constructor:', e.message);
+    }
     
     // Validation basique (adaptée pour Blob)
     if (!req.file.buffer || req.file.size === 0) {
@@ -332,12 +337,22 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
     // SOLUTION DÉFINITIVE: Convertir Blob vers Buffer puis Stream
     console.log('🎙️ Analyse type de données reçues...');
     console.log('📊 Type req.file.buffer:', typeof req.file.buffer);
-    console.log('📊 Constructor:', req.file.buffer.constructor.name);
     
     let audioBuffer;
+    let isBlob = false;
+    
+    // Test sécurisé pour détecter un Blob
+    try {
+      isBlob = req.file.buffer instanceof require('buffer').Blob || 
+               (req.file.buffer.constructor && req.file.buffer.constructor.name === 'Blob') ||
+               (typeof req.file.buffer.arrayBuffer === 'function');
+    } catch (e) {
+      console.log('⚠️ Test Blob échoué, assume Buffer:', e.message);
+      isBlob = false;
+    }
     
     // Vérifier si c'est un Blob et le convertir en Buffer
-    if (req.file.buffer instanceof require('buffer').Blob || req.file.buffer.constructor.name === 'Blob') {
+    if (isBlob) {
       console.log('🔄 Conversion Blob vers Buffer...');
       const arrayBuffer = await req.file.buffer.arrayBuffer();
       audioBuffer = Buffer.from(arrayBuffer);
