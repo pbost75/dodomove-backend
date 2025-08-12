@@ -14,10 +14,20 @@ const router = express.Router();
 let openai;
 try {
   // Essayer plusieurs noms de variables à cause des bugs Railway
-  const apiKey = process.env.OPENAI_API_KEY || 
-                 process.env.OPENAI_KEY || 
-                 process.env.DODO_OPENAI_KEY ||
-                 process.env.OPENAI_SECRET;
+  let apiKey = process.env.OPENAI_API_KEY || 
+               process.env.OPENAI_KEY || 
+               process.env.DODO_OPENAI_KEY ||
+               process.env.OPENAI_SECRET;
+               
+  // Si pas de clé directe, essayer la version Base64 encodée
+  if (!apiKey && process.env.OPENAI_KEY_B64) {
+    try {
+      apiKey = Buffer.from(process.env.OPENAI_KEY_B64, 'base64').toString('utf8');
+      console.log('🔐 Clé OpenAI décodée depuis Base64');
+    } catch (error) {
+      console.error('❌ Erreur décodage Base64:', error.message);
+    }
+  }
   
   console.log('🔍 Debug OpenAI Key Variables:', {
     OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
@@ -389,7 +399,8 @@ router.get('/stats', async (req, res) => {
           OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
           OPENAI_KEY: !!process.env.OPENAI_KEY,
           DODO_OPENAI_KEY: !!process.env.DODO_OPENAI_KEY,
-          OPENAI_SECRET: !!process.env.OPENAI_SECRET
+          OPENAI_SECRET: !!process.env.OPENAI_SECRET,
+          OPENAI_KEY_B64: !!process.env.OPENAI_KEY_B64
         }
       },
       routes: [
