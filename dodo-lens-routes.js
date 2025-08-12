@@ -10,16 +10,24 @@ const crypto = require('crypto');
 
 const router = express.Router();
 
-// Configuration OpenAI avec debug avancé
+// Configuration OpenAI avec debug avancé et fallbacks pour Railway
 let openai;
 try {
-  const apiKey = process.env.OPENAI_API_KEY;
+  // Essayer plusieurs noms de variables à cause des bugs Railway
+  const apiKey = process.env.OPENAI_API_KEY || 
+                 process.env.OPENAI_KEY || 
+                 process.env.DODO_OPENAI_KEY ||
+                 process.env.OPENAI_SECRET;
   
-  console.log('🔍 Debug OpenAI Key:', {
-    exists: !!apiKey,
-    length: apiKey ? apiKey.length : 0,
-    starts_with: apiKey ? apiKey.substring(0, 7) : 'N/A',
-    ends_with: apiKey ? '...' + apiKey.substring(apiKey.length - 4) : 'N/A'
+  console.log('🔍 Debug OpenAI Key Variables:', {
+    OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
+    OPENAI_KEY: !!process.env.OPENAI_KEY,
+    DODO_OPENAI_KEY: !!process.env.DODO_OPENAI_KEY,
+    OPENAI_SECRET: !!process.env.OPENAI_SECRET,
+    selected_key_exists: !!apiKey,
+    selected_key_length: apiKey ? apiKey.length : 0,
+    selected_key_starts: apiKey ? apiKey.substring(0, 7) : 'N/A',
+    selected_key_ends: apiKey ? '...' + apiKey.substring(apiKey.length - 4) : 'N/A'
   });
   
   if (!apiKey || apiKey.trim() === '') {
@@ -375,7 +383,14 @@ router.get('/stats', async (req, res) => {
       openai: {
         configured: !!process.env.OPENAI_API_KEY,
         initialized: !!openai,
-        key_length: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.length : 0
+        key_length: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.length : 0,
+        // Debug Railway - Tester tous les noms de variables
+        debug_vars: {
+          OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
+          OPENAI_KEY: !!process.env.OPENAI_KEY,
+          DODO_OPENAI_KEY: !!process.env.DODO_OPENAI_KEY,
+          OPENAI_SECRET: !!process.env.OPENAI_SECRET
+        }
       },
       routes: [
         '/api/dodo-lens/analyze-vision',
