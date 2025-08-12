@@ -310,19 +310,19 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
     
     console.log('✅ File polyfill robuste installé');
     
-    // Logs détaillés du fichier reçu
+    // Logs détaillés du fichier reçu (sans slice qui ne marche pas sur Blob)
     console.log('📊 Analyse fichier reçu:', {
       fieldname: req.file.fieldname,
       originalname: req.file.originalname,
       mimetype: req.file.mimetype,
       size: req.file.size,
-      buffer_length: req.file.buffer.length,
-      buffer_first_bytes: Array.from(req.file.buffer.slice(0, 16)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')
+      buffer_type: typeof req.file.buffer,
+      buffer_constructor: req.file.buffer.constructor.name
     });
     
-    // Validation basique
-    if (!req.file.buffer || req.file.buffer.length === 0) {
-      throw new Error('Buffer audio vide');
+    // Validation basique (adaptée pour Blob)
+    if (!req.file.buffer || req.file.size === 0) {
+      throw new Error('Fichier audio vide');
     }
     
     if (req.file.size > 25 * 1024 * 1024) {
