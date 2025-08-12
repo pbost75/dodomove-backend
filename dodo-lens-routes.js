@@ -88,6 +88,11 @@ const upload = multer({
 });
 
 // ===============================================
+// MIDDLEWARE JSON POUR ROUTES DODO-LENS
+// ===============================================
+router.use(express.json({ limit: '50mb' })); // Middleware JSON pour parser req.body
+
+// ===============================================
 // MIDDLEWARE DE VÉRIFICATION OPENAI
 // ===============================================
 const requireOpenAI = (req, res, next) => {
