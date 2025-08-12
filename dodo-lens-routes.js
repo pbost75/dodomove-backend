@@ -329,11 +329,30 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
       throw new Error('Fichier audio trop volumineux (>25MB)');
     }
     
-    // SOLUTION DIRECTE: Utiliser le stream directement avec OpenAI
-    console.log('🎙️ Création stream direct pour OpenAI...');
+    // SOLUTION DÉFINITIVE: Convertir Blob vers Buffer puis Stream
+    console.log('🎙️ Analyse type de données reçues...');
+    console.log('📊 Type req.file.buffer:', typeof req.file.buffer);
+    console.log('📊 Constructor:', req.file.buffer.constructor.name);
     
+    let audioBuffer;
+    
+    // Vérifier si c'est un Blob et le convertir en Buffer
+    if (req.file.buffer instanceof require('buffer').Blob || req.file.buffer.constructor.name === 'Blob') {
+      console.log('🔄 Conversion Blob vers Buffer...');
+      const arrayBuffer = await req.file.buffer.arrayBuffer();
+      audioBuffer = Buffer.from(arrayBuffer);
+      console.log('✅ Conversion réussie - Taille:', audioBuffer.length);
+    } else if (Buffer.isBuffer(req.file.buffer)) {
+      console.log('✅ Déjà un Buffer - Taille:', req.file.buffer.length);
+      audioBuffer = req.file.buffer;
+    } else {
+      console.log('🔄 Conversion vers Buffer depuis autre type...');
+      audioBuffer = Buffer.from(req.file.buffer);
+    }
+    
+    // Créer le stream depuis le Buffer validé
     const { Readable } = require('stream');
-    const audioStream = Readable.from(req.file.buffer);
+    const audioStream = Readable.from(audioBuffer);
     
     // Ajouter les propriétés nécessaires pour OpenAI
     audioStream.path = 'audio.webm';
@@ -344,7 +363,7 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
       path: audioStream.path,
       filename: audioStream.filename,
       mimetype: audioStream.mimetype,
-      buffer_size: req.file.buffer.length
+      buffer_size: audioBuffer.length
     });
     
     // Appel OpenAI Whisper avec logs détaillés
