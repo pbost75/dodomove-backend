@@ -10,17 +10,27 @@ const crypto = require('crypto');
 
 const router = express.Router();
 
-// Configuration OpenAI
+// Configuration OpenAI avec debug avancé
 let openai;
 try {
-  if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.trim() === '') {
+  const apiKey = process.env.OPENAI_API_KEY;
+  
+  console.log('🔍 Debug OpenAI Key:', {
+    exists: !!apiKey,
+    length: apiKey ? apiKey.length : 0,
+    starts_with: apiKey ? apiKey.substring(0, 7) : 'N/A',
+    ends_with: apiKey ? '...' + apiKey.substring(apiKey.length - 4) : 'N/A'
+  });
+  
+  if (!apiKey || apiKey.trim() === '') {
     console.log('⚠️ OPENAI_API_KEY non configurée - Routes DodoLens en mode dégradé');
     openai = null;
   } else {
+    const cleanedKey = apiKey.trim();
     openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY.trim()
+      apiKey: cleanedKey
     });
-    console.log('✅ OpenAI SDK initialisé pour DodoLens');
+    console.log('✅ OpenAI SDK initialisé pour DodoLens avec clé valide');
   }
 } catch (error) {
   console.error('❌ Erreur initialisation OpenAI SDK:', error.message);
