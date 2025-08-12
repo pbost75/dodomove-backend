@@ -1,7 +1,7 @@
 [build]
 builder = "nixpacks"
 buildCommand = "npm install"
-watchPatterns = ["/server.js", "/package.json"]
+watchPatterns = ["/server.js", "/package.json", "/dodo-lens-routes.js"]
 
 [deploy]
 startCommand = "node server.js"
