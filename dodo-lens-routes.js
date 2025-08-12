@@ -94,7 +94,14 @@ router.use(express.json({ limit: '50mb' })); // Middleware JSON pour parser req.
 // ===============================================
 // ROUTE EXPÉRIMENTALE: AUDIO RAW (BYPASS MULTER)
 // ===============================================
-router.post('/analyze-audio-raw', dodoLensLimiter, requireOpenAI, express.raw({type: 'audio/*', limit: '25mb'}), async (req, res) => {
+router.post('/analyze-audio-raw', dodoLensLimiter, express.raw({type: 'audio/*', limit: '25mb'}), async (req, res) => {
+  // Vérification OpenAI inline car requireOpenAI pas encore défini
+  if (!openai) {
+    return res.status(503).json({ 
+      error: 'Service OpenAI temporairement indisponible',
+      status: 'retry_later'
+    });
+  }
   try {
     const startTime = Date.now();
     
