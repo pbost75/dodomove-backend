@@ -134,7 +134,7 @@ router.post('/analyze-vision', dodoLensLimiter, requireOpenAI, async (req, res) 
     
     // Appel OpenAI Vision avec gestion d'erreur robuste
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4-vision-preview",
       messages: [
         {
           role: "user",
@@ -180,7 +180,11 @@ router.post('/analyze-vision', dodoLensLimiter, requireOpenAI, async (req, res) 
     });
     
   } catch (error) {
-    console.error('❌ OpenAI Vision Error:', error);
+    console.error('❌ OpenAI Vision Error DÉTAILLÉ:', error);
+    console.error('❌ Error status:', error.status);
+    console.error('❌ Error message:', error.message);
+    console.error('❌ Error code:', error.code);
+    console.error('❌ Error type:', error.type);
     
     // Gestion des erreurs spécifiques OpenAI
     if (error.status === 429) {
@@ -192,19 +196,33 @@ router.post('/analyze-vision', dodoLensLimiter, requireOpenAI, async (req, res) 
     
     if (error.status === 401) {
       return res.status(503).json({ 
-        error: 'Configuration OpenAI invalide, contactez le support' 
+        error: 'Configuration OpenAI invalide, contactez le support',
+        details: 'Clé API invalide ou expirée'
       });
     }
     
-    if (error.status === 400 && error.message.includes('image')) {
+    if (error.status === 400) {
       return res.status(400).json({ 
-        error: 'Format d\'image non supporté ou image corrompue' 
+        error: 'Requête OpenAI invalide',
+        details: error.message
+      });
+    }
+    
+    if (error.status === 403) {
+      return res.status(403).json({ 
+        error: 'Accès refusé - Vérifiez les permissions de votre clé OpenAI',
+        details: 'Clé n\'a pas accès à GPT-4 Vision ou compte sans crédit'
       });
     }
     
     res.status(500).json({ 
       error: 'Erreur analyse IA',
-      details: process.env.NODE_ENV === 'development' ? error.message : 'Erreur interne'
+      details: error.message || 'Erreur interne',
+      debug: {
+        status: error.status,
+        code: error.code,
+        type: error.type
+      }
     });
   }
 });
