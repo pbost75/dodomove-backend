@@ -391,9 +391,9 @@ router.get('/stats', async (req, res) => {
       cache_size: global.dodoLensUsageCache ? global.dodoLensUsageCache.size : 0,
       timestamp: new Date().toISOString(),
       openai: {
-        configured: !!process.env.OPENAI_API_KEY,
+        configured: !!openai, // Vraie détection basée sur l'initialisation réussie
         initialized: !!openai,
-        key_length: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.length : 0,
+        key_length: (process.env.OPENAI_API_KEY || process.env.OPENAI_KEY || process.env.DODO_OPENAI_KEY || process.env.OPENAI_SECRET)?.length || 0,
         // Debug Railway - Tester tous les noms de variables
         debug_vars: {
           OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
