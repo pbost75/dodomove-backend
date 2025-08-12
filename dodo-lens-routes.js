@@ -90,7 +90,7 @@ const upload = multer({
 // ===============================================
 // MIDDLEWARE JSON POUR ROUTES DODO-LENS
 // ===============================================
-router.use(express.json({ limit: '50mb' })); // Middleware JSON pour parser req.body
+router.use(express.json({ limit: '50mb' })); // Middleware JSON pour parser req.body - FIX v1.1
 
 // ===============================================
 // MIDDLEWARE DE VÉRIFICATION OPENAI
