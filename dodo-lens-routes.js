@@ -139,7 +139,7 @@ router.post('/analyze-vision', dodoLensLimiter, requireOpenAI, async (req, res) 
     
     // Appel OpenAI Vision avec gestion d'erreur robuste
     const response = await openai.chat.completions.create({
-      model: "gpt-4-vision-preview",
+      model: "gpt-4o", // Modèle OpenAI le plus récent
       messages: [
         {
           role: "user",
