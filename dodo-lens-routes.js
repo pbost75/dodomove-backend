@@ -246,14 +246,22 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
     console.log(`🔄 DodoLens Audio Transcription - IP: ${hashIP(req.ip)}, Size: ${(req.file.size / 1024 / 1024).toFixed(2)}MB`);
     const startTime = Date.now();
     
-    // Créer un fichier temporaire pour Whisper
-    const audioFile = new File([req.file.buffer], 'audio.webm', {
-      type: req.file.mimetype
-    });
+    // Créer un fichier temporaire pour Whisper (compatible Node.js)
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
     
-    // Appel OpenAI Whisper
+    // Créer fichier temporaire
+    const tempDir = os.tmpdir();
+    const tempFileName = `whisper_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.webm`;
+    const tempFilePath = path.join(tempDir, tempFileName);
+    
+    // Écrire le buffer vers le fichier temporaire
+    fs.writeFileSync(tempFilePath, req.file.buffer);
+    
+    // Appel OpenAI Whisper avec fichier temporaire
     const response = await openai.audio.transcriptions.create({
-      file: audioFile,
+      file: fs.createReadStream(tempFilePath),
       model: "whisper-1",
       language: "fr", // Français pour DOM-TOM
       response_format: "json",
@@ -275,6 +283,14 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
     
     console.log(`✅ Audio transcription success - Text: ${response.text.length} chars, Cost: €${cost.toFixed(4)}, Time: ${processingTime}ms`);
     
+    // Nettoyer le fichier temporaire
+    try {
+      fs.unlinkSync(tempFilePath);
+      console.log('🗑️ Fichier temporaire nettoyé:', tempFileName);
+    } catch (cleanupError) {
+      console.warn('⚠️ Erreur nettoyage fichier temporaire:', cleanupError.message);
+    }
+    
     res.json({
       success: true,
       transcript: response.text,
@@ -288,6 +304,16 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
     
   } catch (error) {
     console.error('❌ Whisper Error:', error);
+    
+    // Nettoyer le fichier temporaire même en cas d'erreur
+    try {
+      if (typeof tempFilePath !== 'undefined') {
+        fs.unlinkSync(tempFilePath);
+        console.log('🗑️ Fichier temporaire nettoyé après erreur');
+      }
+    } catch (cleanupError) {
+      console.warn('⚠️ Erreur nettoyage après erreur:', cleanupError.message);
+    }
     
     if (error.status === 400 && error.message.includes('file')) {
       return res.status(400).json({ 
