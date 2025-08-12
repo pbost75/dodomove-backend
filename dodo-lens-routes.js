@@ -249,55 +249,66 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
     // Préparation stream pour OpenAI Whisper
     console.log('🔧 Préparation stream audio pour OpenAI Whisper...');
     
-    // SOLUTION DÉFINITIVE: Forcer File global AVANT utilisation OpenAI
-    console.log('🔧 Fix File global pour OpenAI SDK...');
+    // SOLUTION ULTRA-ROBUSTE: Polyfill File optimisé pour Railway
+    console.log('🔧 Création File polyfill robuste pour Railway...');
     
-    // Forcer la définition de File global pour Railway
-    if (!globalThis.File) {
-      try {
-        // Méthode 1: Import dynamique node:buffer
-        const { File } = await import('node:buffer');
-        globalThis.File = File;
-        console.log('✅ File défini depuis node:buffer');
-      } catch (bufferError) {
-        console.log('⚠️ node:buffer non disponible, créant File polyfill...');
-        // Méthode 2: Polyfill File pour versions anciennes
-        globalThis.File = class File {
-          constructor(fileBits, fileName, options = {}) {
-            this.name = fileName;
-            this.type = options.type || '';
-            this.size = fileBits.reduce((acc, bit) => acc + (bit.length || bit.size || bit.byteLength || 0), 0);
-            this.lastModified = Date.now();
-            
-            // Créer un buffer combiné
-            if (fileBits.length === 1 && Buffer.isBuffer(fileBits[0])) {
-              this._buffer = fileBits[0];
-            } else {
-              this._buffer = Buffer.concat(fileBits.map(bit => 
-                Buffer.isBuffer(bit) ? bit : Buffer.from(bit)
-              ));
-            }
-          }
-          
-          stream() {
-            const { Readable } = require('stream');
-            return Readable.from(this._buffer);
-          }
-          
-          arrayBuffer() {
-            return Promise.resolve(this._buffer.buffer.slice(
-              this._buffer.byteOffset, 
-              this._buffer.byteOffset + this._buffer.byteLength
-            ));
-          }
-          
-          text() {
-            return Promise.resolve(this._buffer.toString());
-          }
-        };
-        console.log('✅ File polyfill créé');
+    // Toujours utiliser notre polyfill pour éviter les warnings expérimentaux
+    globalThis.File = class File {
+      constructor(fileBits, fileName, options = {}) {
+        this.name = fileName;
+        this.type = options.type || '';
+        this.lastModified = Date.now();
+        
+        // Créer un buffer combiné optimisé
+        if (fileBits.length === 1 && Buffer.isBuffer(fileBits[0])) {
+          this._buffer = fileBits[0];
+          this.size = fileBits[0].length;
+        } else {
+          const buffers = fileBits.map(bit => {
+            if (Buffer.isBuffer(bit)) return bit;
+            if (bit instanceof ArrayBuffer) return Buffer.from(bit);
+            if (typeof bit === 'string') return Buffer.from(bit);
+            return Buffer.from(bit);
+          });
+          this._buffer = Buffer.concat(buffers);
+          this.size = this._buffer.length;
+        }
+        
+        console.log(`📦 File polyfill créé: ${this.name} (${this.size} bytes, ${this.type})`);
       }
-    }
+      
+      // Méthode stream() compatible OpenAI
+      stream() {
+        const { Readable } = require('stream');
+        const stream = Readable.from(this._buffer);
+        
+        // Propriétés nécessaires pour OpenAI
+        stream.path = this.name;
+        stream.filename = this.name;
+        stream.mimetype = this.type;
+        
+        return stream;
+      }
+      
+      // Méthodes Web API standards
+      arrayBuffer() {
+        return Promise.resolve(this._buffer.buffer.slice(
+          this._buffer.byteOffset, 
+          this._buffer.byteOffset + this._buffer.byteLength
+        ));
+      }
+      
+      text() {
+        return Promise.resolve(this._buffer.toString('utf8'));
+      }
+      
+      // Méthode pour récupérer le buffer directement
+      buffer() {
+        return this._buffer;
+      }
+    };
+    
+    console.log('✅ File polyfill robuste installé');
     
     // Logs détaillés du fichier reçu
     console.log('📊 Analyse fichier reçu:', {
@@ -329,14 +340,39 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
       size: audioFile.size
     });
     
-    // Appel OpenAI Whisper
-    const response = await openai.audio.transcriptions.create({
-      file: audioFile,
+    // Appel OpenAI Whisper avec logs détaillés
+    console.log('🚀 Début appel OpenAI Whisper API...');
+    console.log('📋 Paramètres Whisper:', {
       model: "whisper-1",
       language: "fr",
       response_format: "json",
-      temperature: 0.1
+      temperature: 0.1,
+      file_name: audioFile.name,
+      file_size: audioFile.size,
+      file_type: audioFile.type
     });
+    
+    try {
+      const response = await openai.audio.transcriptions.create({
+        file: audioFile,
+        model: "whisper-1",
+        language: "fr",
+        response_format: "json",
+        temperature: 0.1
+      });
+      
+      console.log('🎉 Réponse OpenAI Whisper reçue!');
+      console.log('📝 Texte transcrit:', response.text.substring(0, 100) + (response.text.length > 100 ? '...' : ''));
+      
+    } catch (whisperApiError) {
+      console.error('💥 Erreur OpenAI Whisper API:', {
+        message: whisperApiError.message,
+        status: whisperApiError.status,
+        type: whisperApiError.type,
+        stack: whisperApiError.stack?.substring(0, 500)
+      });
+      throw whisperApiError;
+    }
     
   } catch (error) {
     console.error('❌ Whisper Error:', error);
