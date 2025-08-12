@@ -92,6 +92,101 @@ const upload = multer({
 router.use(express.json({ limit: '50mb' })); // Middleware JSON pour parser req.body - FIX v1.1
 
 // ===============================================
+// ROUTE EXPÉRIMENTALE: AUDIO RAW (BYPASS MULTER)
+// ===============================================
+router.post('/analyze-audio-raw', dodoLensLimiter, requireOpenAI, express.raw({type: 'audio/*', limit: '25mb'}), async (req, res) => {
+  try {
+    const startTime = Date.now();
+    
+    console.log('🎙️ Audio RAW reçu - BYPASS MULTER COMPLET:', {
+      body_type: typeof req.body,
+      body_constructor: req.body.constructor.name,
+      body_length: req.body.length,
+      content_type: req.headers['content-type']
+    });
+    
+    // Validation basique
+    if (!req.body || req.body.length === 0) {
+      throw new Error('Aucun fichier audio reçu');
+    }
+    
+    // Le req.body EST DÉJÀ UN BUFFER avec express.raw !
+    const audioBuffer = req.body;
+    console.log('✅ Buffer direct depuis express.raw:', audioBuffer.length, 'bytes');
+    
+    // Créer fichier temporaire DIRECTEMENT
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    
+    const tempFileName = `whisper_raw_${Date.now()}.webm`;
+    const tempFilePath = path.join(os.tmpdir(), tempFileName);
+    
+    console.log('💾 Écriture directe Buffer → fichier temporaire');
+    fs.writeFileSync(tempFilePath, audioBuffer);
+    
+    console.log('📊 Fichier temporaire RAW créé:', {
+      path: tempFilePath,
+      size: audioBuffer.length,
+      exists: fs.existsSync(tempFilePath)
+    });
+    
+    // Appel OpenAI Whisper SANS CONVERSION
+    console.log('🚀 OpenAI Whisper (méthode RAW - sans conversion)...');
+    
+    let response;
+    try {
+      const audioFileStream = fs.createReadStream(tempFilePath);
+      audioFileStream.path = tempFilePath;
+      
+      response = await openai.audio.transcriptions.create({
+        file: audioFileStream,
+        model: "whisper-1",
+        language: "fr",
+        response_format: "json",
+        temperature: 0.1
+      });
+      
+      console.log('🎉 SUCCESS RAW! Texte transcrit:', response.text);
+      
+    } finally {
+      // Cleanup
+      try {
+        if (fs.existsSync(tempFilePath)) {
+          fs.unlinkSync(tempFilePath);
+          console.log('🗑️ Fichier temporaire RAW supprimé');
+        }
+      } catch (cleanupError) {
+        console.log('⚠️ Erreur cleanup:', cleanupError.message);
+      }
+    }
+    
+    // Retourner résultats
+    const processingTime = Date.now() - startTime;
+    const cost = calculateOpenAICost('whisper-1', { file_size: audioBuffer.length });
+    
+    res.json({
+      success: true,
+      transcript: response.text,
+      method: 'raw-bypass-multer',
+      usage: {
+        file_size: audioBuffer.length,
+        cost: Math.round(cost * 10000) / 10000,
+        processing_time_ms: processingTime,
+        transcript_length: response.text.length
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Whisper RAW Error:', error);
+    res.status(500).json({ 
+      error: 'Erreur transcription RAW',
+      details: error.message
+    });
+  }
+});
+
+// ===============================================
 // MIDDLEWARE DE VÉRIFICATION OPENAI
 // ===============================================
 const requireOpenAI = (req, res, next) => {
@@ -341,26 +436,42 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
     const path = require('path');
     const os = require('os');
     
-    // Convertir le buffer en Buffer Node.js si nécessaire
+    // DIAGNOSTIC COMPLET et conversion forcée
+    console.log('🔍 DIAGNOSTIC req.file.buffer:');
+    console.log('  - Type:', typeof req.file.buffer);
+    console.log('  - Constructor:', req.file.buffer.constructor.name);
+    console.log('  - instanceof Buffer:', req.file.buffer instanceof Buffer);
+    console.log('  - Has arrayBuffer method:', typeof req.file.buffer.arrayBuffer === 'function');
+    console.log('  - Is array-like:', Array.isArray(req.file.buffer));
+    
     let finalBuffer;
-    if (req.file.buffer instanceof Buffer) {
-      finalBuffer = req.file.buffer;
-      console.log('✅ Buffer déjà valide');
-    } else {
-      console.log('🔄 Conversion en Buffer...');
-      try {
-        // Si c'est un Blob, convertir via arrayBuffer
-        if (typeof req.file.buffer.arrayBuffer === 'function') {
-          const arrayBuffer = await req.file.buffer.arrayBuffer();
-          finalBuffer = Buffer.from(arrayBuffer);
-        } else {
-          finalBuffer = Buffer.from(req.file.buffer);
-        }
-        console.log('✅ Conversion Buffer réussie');
-      } catch (convError) {
-        console.log('❌ Erreur conversion:', convError.message);
-        throw new Error('Impossible de convertir le fichier audio');
+    
+    // CONVERSION FORCÉE - Toutes les méthodes
+    try {
+      if (Buffer.isBuffer(req.file.buffer)) {
+        console.log('✅ Déjà un Buffer Node.js');
+        finalBuffer = req.file.buffer;
+      } else if (req.file.buffer instanceof ArrayBuffer) {
+        console.log('🔄 Conversion depuis ArrayBuffer...');
+        finalBuffer = Buffer.from(req.file.buffer);
+      } else if (typeof req.file.buffer.arrayBuffer === 'function') {
+        console.log('🔄 Conversion depuis Blob via arrayBuffer...');
+        const arrayBuffer = await req.file.buffer.arrayBuffer();
+        finalBuffer = Buffer.from(arrayBuffer);
+      } else if (req.file.buffer.buffer) {
+        console.log('🔄 Conversion depuis TypedArray...');
+        finalBuffer = Buffer.from(req.file.buffer.buffer);
+      } else {
+        console.log('🔄 Conversion générique...');
+        finalBuffer = Buffer.from(req.file.buffer);
       }
+      
+      console.log('✅ Conversion réussie - Buffer final:', finalBuffer.length, 'bytes');
+      
+    } catch (convError) {
+      console.log('❌ TOUTES conversions ont échoué:', convError.message);
+      console.log('🆘 Type détaillé:', Object.prototype.toString.call(req.file.buffer));
+      throw new Error(`Conversion impossible: ${convError.message}`);
     }
     
     // Créer fichier temporaire
