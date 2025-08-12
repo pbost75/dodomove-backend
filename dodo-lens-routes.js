@@ -329,15 +329,22 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
       throw new Error('Fichier audio trop volumineux (>25MB)');
     }
     
-    // Créer File avec le global maintenant défini
-    const audioFile = new globalThis.File([req.file.buffer], 'audio.webm', {
-      type: req.file.mimetype || 'audio/webm'
-    });
+    // SOLUTION DIRECTE: Utiliser le stream directement avec OpenAI
+    console.log('🎙️ Création stream direct pour OpenAI...');
     
-    console.log('🎙️ File créé pour Whisper:', {
-      name: audioFile.name,
-      type: audioFile.type,
-      size: audioFile.size
+    const { Readable } = require('stream');
+    const audioStream = Readable.from(req.file.buffer);
+    
+    // Ajouter les propriétés nécessaires pour OpenAI
+    audioStream.path = 'audio.webm';
+    audioStream.filename = req.file.originalname || 'audio.webm';
+    audioStream.mimetype = req.file.mimetype || 'audio/webm';
+    
+    console.log('📊 Stream configuré:', {
+      path: audioStream.path,
+      filename: audioStream.filename,
+      mimetype: audioStream.mimetype,
+      buffer_size: req.file.buffer.length
     });
     
     // Appel OpenAI Whisper avec logs détaillés
@@ -347,14 +354,13 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
       language: "fr",
       response_format: "json",
       temperature: 0.1,
-      file_name: audioFile.name,
-      file_size: audioFile.size,
-      file_type: audioFile.type
+      stream_path: audioStream.path,
+      stream_mimetype: audioStream.mimetype
     });
     
     try {
       const response = await openai.audio.transcriptions.create({
-        file: audioFile,
+        file: audioStream,
         model: "whisper-1",
         language: "fr",
         response_format: "json",
@@ -362,14 +368,15 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
       });
       
       console.log('🎉 Réponse OpenAI Whisper reçue!');
-      console.log('📝 Texte transcrit:', response.text.substring(0, 100) + (response.text.length > 100 ? '...' : ''));
+      console.log('📝 Longueur transcription:', response.text.length, 'caractères');
+      console.log('📝 Début du texte:', response.text.substring(0, 200) + (response.text.length > 200 ? '...' : ''));
       
     } catch (whisperApiError) {
       console.error('💥 Erreur OpenAI Whisper API:', {
         message: whisperApiError.message,
         status: whisperApiError.status,
         type: whisperApiError.type,
-        stack: whisperApiError.stack?.substring(0, 500)
+        error_details: whisperApiError.error || 'N/A'
       });
       throw whisperApiError;
     }
