@@ -246,41 +246,30 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
     console.log(`🔄 DodoLens Audio Transcription - IP: ${hashIP(req.ip)}, Size: ${(req.file.size / 1024 / 1024).toFixed(2)}MB`);
     const startTime = Date.now();
     
-    // Solution compatible avec toutes versions Node.js
-    console.log('🔧 Initialisation File global pour OpenAI...');
+    // Préparation stream pour OpenAI Whisper
+    console.log('🔧 Préparation stream audio pour OpenAI Whisper...');
     
-    // Définir File global si pas disponible (fix Railway)
-    if (typeof globalThis.File === 'undefined') {
-      try {
-        const { File } = await import('node:buffer');
-        globalThis.File = File;
-        console.log('✅ File global défini depuis node:buffer');
-      } catch (e) {
-        console.log('⚠️ node:buffer.File non disponible, utilisation Blob fallback');
-        // Fallback pour versions plus anciennes
-        globalThis.File = class File {
-          constructor(chunks, name, options) {
-            this.arrayBuffer = async () => {
-              const blob = new Blob(chunks, options);
-              return await blob.arrayBuffer();
-            };
-            this.name = name;
-            this.type = options?.type || 'application/octet-stream';
-          }
-        };
-      }
-    }
+    // Créer un stream compatible avec OpenAI Whisper - FIX CRITIQUE
+    // Utilisation de stream au lieu de File global qui pose problème sur Railway
+    const { Readable } = require('stream');
     
-    // Créer File pour OpenAI Whisper
-    const audioFile = new File([req.file.buffer], 'audio.webm', {
-      type: req.file.mimetype || 'audio/webm'
+    // Créer un readable stream depuis le buffer
+    const audioStream = Readable.from(req.file.buffer);
+    
+    // Propriétés nécessaires pour OpenAI (simulation d'un File)
+    audioStream.path = 'audio.webm'; // Extension importante pour OpenAI
+    audioStream.originalname = 'audio.webm';
+    audioStream.mimetype = req.file.mimetype || 'audio/webm';
+    
+    console.log('🎙️ Stream créé pour Whisper:', {
+      size: req.file.buffer.length,
+      mimetype: audioStream.mimetype,
+      path: audioStream.path
     });
     
-    console.log('🎙️ File créé pour Whisper:', audioFile.name, 'type:', audioFile.type);
-    
-    // Appel OpenAI Whisper
+    // Appel OpenAI Whisper avec stream
     const response = await openai.audio.transcriptions.create({
-      file: audioFile,
+      file: audioStream,
       model: "whisper-1",
       language: "fr", // Français pour DOM-TOM
       response_format: "json",
