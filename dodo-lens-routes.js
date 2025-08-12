@@ -334,67 +334,69 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
       throw new Error('Fichier audio trop volumineux (>25MB)');
     }
     
-    // SOLUTION DÉFINITIVE: Convertir Blob vers Buffer puis Stream
-    console.log('🎙️ Analyse type de données reçues...');
-    console.log('📊 Type req.file.buffer:', typeof req.file.buffer);
+    // SOLUTION DÉFINITIVE: File System temporaire - La seule qui marche avec OpenAI SDK
+    console.log('🎙️ Utilisation fichier temporaire pour OpenAI compatibility...');
     
-    let audioBuffer;
-    let isBlob = false;
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
     
-    // Test sécurisé pour détecter un Blob
-    try {
-      isBlob = req.file.buffer instanceof require('buffer').Blob || 
-               (req.file.buffer.constructor && req.file.buffer.constructor.name === 'Blob') ||
-               (typeof req.file.buffer.arrayBuffer === 'function');
-    } catch (e) {
-      console.log('⚠️ Test Blob échoué, assume Buffer:', e.message);
-      isBlob = false;
-    }
-    
-    // Vérifier si c'est un Blob et le convertir en Buffer
-    if (isBlob) {
-      console.log('🔄 Conversion Blob vers Buffer...');
-      const arrayBuffer = await req.file.buffer.arrayBuffer();
-      audioBuffer = Buffer.from(arrayBuffer);
-      console.log('✅ Conversion réussie - Taille:', audioBuffer.length);
-    } else if (Buffer.isBuffer(req.file.buffer)) {
-      console.log('✅ Déjà un Buffer - Taille:', req.file.buffer.length);
-      audioBuffer = req.file.buffer;
+    // Convertir le buffer en Buffer Node.js si nécessaire
+    let finalBuffer;
+    if (req.file.buffer instanceof Buffer) {
+      finalBuffer = req.file.buffer;
+      console.log('✅ Buffer déjà valide');
     } else {
-      console.log('🔄 Conversion vers Buffer depuis autre type...');
-      audioBuffer = Buffer.from(req.file.buffer);
+      console.log('🔄 Conversion en Buffer...');
+      try {
+        // Si c'est un Blob, convertir via arrayBuffer
+        if (typeof req.file.buffer.arrayBuffer === 'function') {
+          const arrayBuffer = await req.file.buffer.arrayBuffer();
+          finalBuffer = Buffer.from(arrayBuffer);
+        } else {
+          finalBuffer = Buffer.from(req.file.buffer);
+        }
+        console.log('✅ Conversion Buffer réussie');
+      } catch (convError) {
+        console.log('❌ Erreur conversion:', convError.message);
+        throw new Error('Impossible de convertir le fichier audio');
+      }
     }
     
-    // Créer le stream depuis le Buffer validé
-    const { Readable } = require('stream');
-    const audioStream = Readable.from(audioBuffer);
+    // Créer fichier temporaire
+    const tempFileName = `whisper_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.webm`;
+    const tempFilePath = path.join(os.tmpdir(), tempFileName);
     
-    // Ajouter les propriétés nécessaires pour OpenAI
-    audioStream.path = 'audio.webm';
-    audioStream.filename = req.file.originalname || 'audio.webm';
-    audioStream.mimetype = req.file.mimetype || 'audio/webm';
+    console.log('💾 Écriture fichier temporaire:', tempFilePath);
+    fs.writeFileSync(tempFilePath, finalBuffer);
     
-    console.log('📊 Stream configuré:', {
-      path: audioStream.path,
-      filename: audioStream.filename,
-      mimetype: audioStream.mimetype,
-      buffer_size: audioBuffer.length
+    console.log('📊 Fichier temporaire créé:', {
+      path: tempFilePath,
+      size: finalBuffer.length,
+      exists: fs.existsSync(tempFilePath)
     });
     
-    // Appel OpenAI Whisper avec logs détaillés
+    // Appel OpenAI Whisper avec fichier temporaire (SOLUTION DÉFINITIVE)
     console.log('🚀 Début appel OpenAI Whisper API...');
     console.log('📋 Paramètres Whisper:', {
       model: "whisper-1",
-      language: "fr",
+      language: "fr", 
       response_format: "json",
       temperature: 0.1,
-      stream_path: audioStream.path,
-      stream_mimetype: audioStream.mimetype
+      file_path: tempFilePath,
+      file_size: finalBuffer.length
     });
     
+    let response;
     try {
-      const response = await openai.audio.transcriptions.create({
-        file: audioStream,
+      // Créer ReadStream depuis le fichier temporaire (standard Node.js)
+      const audioFileStream = fs.createReadStream(tempFilePath);
+      audioFileStream.path = tempFilePath; // Important pour OpenAI SDK
+      
+      console.log('📁 ReadStream natif créé depuis fichier temporaire');
+      
+      response = await openai.audio.transcriptions.create({
+        file: audioFileStream,
         model: "whisper-1",
         language: "fr",
         response_format: "json",
@@ -403,7 +405,7 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
       
       console.log('🎉 Réponse OpenAI Whisper reçue!');
       console.log('📝 Longueur transcription:', response.text.length, 'caractères');
-      console.log('📝 Début du texte:', response.text.substring(0, 200) + (response.text.length > 200 ? '...' : ''));
+      console.log('📝 Texte transcrit:', response.text);
       
     } catch (whisperApiError) {
       console.error('💥 Erreur OpenAI Whisper API:', {
@@ -413,7 +415,44 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
         error_details: whisperApiError.error || 'N/A'
       });
       throw whisperApiError;
+    } finally {
+      // Nettoyer le fichier temporaire (TOUJOURS)
+      try {
+        if (fs.existsSync(tempFilePath)) {
+          fs.unlinkSync(tempFilePath);
+          console.log('🗑️ Fichier temporaire supprimé:', tempFilePath);
+        }
+      } catch (cleanupError) {
+        console.log('⚠️ Erreur suppression fichier temporaire:', cleanupError.message);
+      }
     }
+    
+    // Calcul du temps de traitement et coût
+    const processingTime = Date.now() - startTime;
+    const cost = calculateOpenAICost('whisper-1', { file_size: req.file.size });
+    
+    // Log usage
+    await logDodoLensUsage(req.ip, 'whisper', {
+      file_size: req.file.size,
+      cost: cost,
+      processing_time_ms: processingTime,
+      transcript_length: response.text.length,
+      timestamp: new Date()
+    });
+    
+    console.log(`✅ Audio transcription success - Text: ${response.text.length} chars, Cost: €${cost.toFixed(4)}, Time: ${processingTime}ms`);
+    
+    // Retourner les résultats
+    res.json({
+      success: true,
+      transcript: response.text,
+      usage: {
+        file_size: req.file.size,
+        cost: Math.round(cost * 10000) / 10000,
+        processing_time_ms: processingTime,
+        transcript_length: response.text.length
+      }
+    });
     
   } catch (error) {
     console.error('❌ Whisper Error:', error);
