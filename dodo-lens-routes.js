@@ -249,10 +249,57 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
     // Préparation stream pour OpenAI Whisper
     console.log('🔧 Préparation stream audio pour OpenAI Whisper...');
     
-    // SOLUTION RETOUR AU BUFFER DIRECT - Le problème n'est pas le File mais autre chose
-    console.log('🔧 Debug: Utilisation buffer direct pour Whisper...');
+    // SOLUTION DÉFINITIVE: Forcer File global AVANT utilisation OpenAI
+    console.log('🔧 Fix File global pour OpenAI SDK...');
     
-    // Logs détaillés pour debug
+    // Forcer la définition de File global pour Railway
+    if (!globalThis.File) {
+      try {
+        // Méthode 1: Import dynamique node:buffer
+        const { File } = await import('node:buffer');
+        globalThis.File = File;
+        console.log('✅ File défini depuis node:buffer');
+      } catch (bufferError) {
+        console.log('⚠️ node:buffer non disponible, créant File polyfill...');
+        // Méthode 2: Polyfill File pour versions anciennes
+        globalThis.File = class File {
+          constructor(fileBits, fileName, options = {}) {
+            this.name = fileName;
+            this.type = options.type || '';
+            this.size = fileBits.reduce((acc, bit) => acc + (bit.length || bit.size || bit.byteLength || 0), 0);
+            this.lastModified = Date.now();
+            
+            // Créer un buffer combiné
+            if (fileBits.length === 1 && Buffer.isBuffer(fileBits[0])) {
+              this._buffer = fileBits[0];
+            } else {
+              this._buffer = Buffer.concat(fileBits.map(bit => 
+                Buffer.isBuffer(bit) ? bit : Buffer.from(bit)
+              ));
+            }
+          }
+          
+          stream() {
+            const { Readable } = require('stream');
+            return Readable.from(this._buffer);
+          }
+          
+          arrayBuffer() {
+            return Promise.resolve(this._buffer.buffer.slice(
+              this._buffer.byteOffset, 
+              this._buffer.byteOffset + this._buffer.byteLength
+            ));
+          }
+          
+          text() {
+            return Promise.resolve(this._buffer.toString());
+          }
+        };
+        console.log('✅ File polyfill créé');
+      }
+    }
+    
+    // Logs détaillés du fichier reçu
     console.log('📊 Analyse fichier reçu:', {
       fieldname: req.file.fieldname,
       originalname: req.file.originalname,
@@ -271,79 +318,25 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
       throw new Error('Fichier audio trop volumineux (>25MB)');
     }
     
-    // Créer un objet File simple pour OpenAI
-    const fs = require('fs');
-    const path = require('path');
-    const os = require('os');
+    // Créer File avec le global maintenant défini
+    const audioFile = new globalThis.File([req.file.buffer], 'audio.webm', {
+      type: req.file.mimetype || 'audio/webm'
+    });
     
-    // Écrire temporairement le fichier
-    const tempPath = path.join(os.tmpdir(), `whisper_${Date.now()}.webm`);
-    fs.writeFileSync(tempPath, req.file.buffer);
+    console.log('🎙️ File créé pour Whisper:', {
+      name: audioFile.name,
+      type: audioFile.type,
+      size: audioFile.size
+    });
     
-    console.log('💾 Fichier temporaire créé:', tempPath);
-    
-    try {
-      // Créer un ReadStream pour OpenAI
-      const audioStream = fs.createReadStream(tempPath);
-      audioStream.path = tempPath; // Important pour OpenAI
-      
-      console.log('🎙️ Stream créé pour Whisper depuis fichier temporaire');
-      
-      // Appel OpenAI Whisper
-      const response = await openai.audio.transcriptions.create({
-        file: audioStream,
-        model: "whisper-1",
-        language: "fr",
-        response_format: "json",
-        temperature: 0.1
-      });
-      
-      console.log('✅ Réponse OpenAI reçue');
-      
-      // Nettoyer le fichier temporaire
-      try {
-        fs.unlinkSync(tempPath);
-        console.log('🗑️ Fichier temporaire supprimé');
-      } catch (cleanupError) {
-        console.warn('⚠️ Échec suppression fichier temporaire:', cleanupError.message);
-      }
-      
-      // Continue avec le processing normal
-      const processingTime = Date.now() - startTime;
-      
-      // Log usage
-      const cost = calculateOpenAICost('whisper-1', { file_size: req.file.size });
-      
-      await logDodoLensUsage(req.ip, 'whisper', {
-        file_size: req.file.size,
-        cost: cost,
-        processing_time_ms: processingTime,
-        transcript_length: response.text.length,
-        timestamp: new Date()
-      });
-      
-      console.log(`✅ Audio transcription success - Text: ${response.text.length} chars, Cost: €${cost.toFixed(4)}, Time: ${processingTime}ms`);
-      
-      res.json({
-        success: true,
-        transcript: response.text,
-        usage: {
-          file_size: req.file.size,
-          cost: Math.round(cost * 10000) / 10000,
-          processing_time_ms: processingTime,
-          transcript_length: response.text.length
-        }
-      });
-      
-    } catch (whisperError) {
-      // Nettoyer en cas d'erreur
-      try {
-        fs.unlinkSync(tempPath);
-      } catch (cleanupError) {
-        // Ignore cleanup errors
-      }
-      throw whisperError;
-    }
+    // Appel OpenAI Whisper
+    const response = await openai.audio.transcriptions.create({
+      file: audioFile,
+      model: "whisper-1",
+      language: "fr",
+      response_format: "json",
+      temperature: 0.1
+    });
     
   } catch (error) {
     console.error('❌ Whisper Error:', error);
