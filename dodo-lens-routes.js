@@ -94,7 +94,7 @@ router.use(express.json({ limit: '50mb' })); // Middleware JSON pour parser req.
 // ===============================================
 // ROUTE EXPÉRIMENTALE: AUDIO RAW (BYPASS MULTER)
 // ===============================================
-router.post('/analyze-audio-raw', dodoLensLimiter, express.raw({type: 'audio/*', limit: '25mb'}), async (req, res) => {
+router.post('/analyze-audio-raw', express.raw({type: 'audio/*', limit: '25mb'}), async (req, res) => {
   // Vérification OpenAI inline car requireOpenAI pas encore défini
   if (!openai) {
     return res.status(503).json({ 
@@ -239,7 +239,7 @@ const requireOpenAI = (req, res, next) => {
 // ===============================================
 // ROUTE 1: ANALYSE VISION (FRAMES VIDÉO)
 // ===============================================
-router.post('/analyze-vision', dodoLensLimiter, requireOpenAI, async (req, res) => {
+router.post('/analyze-vision', requireOpenAI, async (req, res) => {
   try {
     const { imageData, prompt } = req.body;
     
@@ -617,7 +617,7 @@ router.post('/analyze-audio', dodoLensLimiter, requireOpenAI, upload.single('aud
 // ===============================================
 // ROUTE 3: ANALYSE FUSION GPT-4
 // ===============================================
-router.post('/analyze-fusion', dodoLensLimiter, requireOpenAI, async (req, res) => {
+router.post('/analyze-fusion', requireOpenAI, async (req, res) => {
   try {
     const { visualResults, audioTranscript, prompt } = req.body;
     
