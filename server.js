@@ -79,6 +79,43 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 const host = '0.0.0.0';
 
+// Derrière le proxy Railway : sans cela, req.ip est l'IP du proxy et la limite
+// DodoLens s'applique à tous les visiteurs à la fois
+app.set('trust proxy', 1);
+
+// Routes de test et de debug désactivées en production (lot 0, 04/11/2026)
+const DISABLED_ROUTES = new Set([
+  '/test-airtable',
+  '/env',
+  '/test',
+  '/test-mail-tester',
+  '/test-mail-tester-alert',
+  '/test-email-validation',
+  '/api/partage/test',
+  '/api/partage/test-reminder',
+  '/api/partage/test-reminders-1h'
+]);
+app.use((req, res, next) => {
+  if (DISABLED_ROUTES.has(req.path)) {
+    return res.status(404).send('Not found');
+  }
+  next();
+});
+
+// Clé d'accès à une demande : seul le lien remis au particulier après l'envoi
+// du formulaire permet de relire ses coordonnées (GET /request/:id?k=...)
+function requestAccessKey(reference) {
+  const secret = process.env.REQUEST_LINK_SECRET;
+  if (!secret || !reference) return null;
+  return crypto.createHmac('sha256', secret).update(String(reference)).digest('base64url').slice(0, 32);
+}
+
+function isValidAccessKey(reference, key) {
+  const expected = requestAccessKey(reference);
+  if (!expected || typeof key !== 'string' || key.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(key));
+}
+
 // Logging middleware avec plus de détails
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - IP: ${req.ip}`);
@@ -814,12 +851,41 @@ function generateItemsHTML(items) {
 // Route pour envoyer les emails
 app.post('/send-email', async (req, res) => {
   console.log('POST /send-email appelé');
-  console.log('Body reçu:', req.body);
   
   try {
     // Détecter le type d'email selon les données reçues
     const { type, email, name, items, totalVolume, movingTimelineText, 
             requestId, customerEmail, customerPhone, subject, message } = req.body;
+    
+    // DEMANDE DE RAPPEL DEPUIS LA PAGE DE CONFIRMATION
+    if (type === 'callback_request') {
+      const { reason, availableDays, preferredTime } = req.body;
+      if (!requestId || !customerPhone || !reason) {
+        return res.status(400).json({ success: false, error: 'Données de rappel manquantes' });
+      }
+      const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const days = Array.isArray(availableDays) ? availableDays.join(', ') : '';
+      const { error } = await resend.emails.send({
+        from: 'Dodomove <hello@dodomove.fr>',
+        to: ['bost.analytics@gmail.com'], // Email de support
+        subject: `[Rappel demandé] ${requestId}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">Demande de rappel</h2>
+            <p><strong>Demande :</strong> ${escapeHtml(requestId)}</p>
+            <p><strong>Téléphone :</strong> ${escapeHtml(customerPhone)}</p>
+            <p><strong>Motif :</strong> ${escapeHtml(reason)}</p>
+            <p><strong>Jours :</strong> ${escapeHtml(days)}</p>
+            <p><strong>Créneau :</strong> ${escapeHtml(preferredTime)}</p>
+          </div>
+        `
+      });
+      if (error) {
+        console.error('Erreur Resend (rappel):', error.message || error);
+        return res.status(500).json({ success: false, error: "Erreur lors de l'envoi de la demande de rappel" });
+      }
+      return res.status(200).json({ success: true, message: 'Demande de rappel envoyée' });
+    }
     
     // ROUTE POUR LES EMAILS DE CONTACT DU FUNNEL
     if (type === 'contact_support' || (requestId && customerEmail && subject && message)) {
@@ -1100,14 +1166,12 @@ app.post('/send-email', async (req, res) => {
 // Route pour traiter les leads du funnel de devis
 app.post('/submit-funnel', async (req, res) => {
   console.log('POST /submit-funnel appelé');
-  console.log('Body reçu:', JSON.stringify(req.body).substring(0, 500) + '...'); // Affichage partiel pour éviter les logs trop longs
   
   try {
     // Vérification explicite des variables d'environnement Airtable
     console.log('Vérification des variables d\'environnement Airtable:');
     console.log('- AIRTABLE_API_KEY défini:', !!process.env.AIRTABLE_API_KEY);
     console.log('- AIRTABLE_BASE_ID défini:', !!process.env.AIRTABLE_BASE_ID);
-    console.log('- AIRTABLE_API_KEY (premiers caractères):', process.env.AIRTABLE_API_KEY ? process.env.AIRTABLE_API_KEY.substring(0, 5) + '...' : 'non défini');
     console.log('- AIRTABLE_BASE_ID:', process.env.AIRTABLE_BASE_ID);
     
     if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
@@ -1223,6 +1287,7 @@ app.post('/submit-funnel', async (req, res) => {
     };
     
     const reference = generateReference();
+    const accessKey = requestAccessKey(reference);
 
     // Vérification explicite de la connexion Airtable AVANT d'envoyer les données
     console.log('Test préliminaire de connexion à Airtable...');
@@ -1419,7 +1484,8 @@ app.post('/submit-funnel', async (req, res) => {
               '3pieces': '2-bedroom', // 1 salon + 2 chambres
               '4pieces': '3-bedroom', // 1 salon + 3 chambres
               '5pieces': '4-bedroom', // 1 salon + 4 chambres
-              '6pieces': '5+ bedrooms' // 1 salon + 5 chambres ou plus
+              '6pieces': '5+ bedrooms', // 1 salon + 5 chambres ou plus
+              '6pluspieces': '5+ bedrooms' // valeur envoyée par le formulaire actuel
             };
             const size = personalBelongingsDetails?.housingSize || '';
             // Si la taille est vide, ne pas inclure ce champ du tout
@@ -1536,6 +1602,7 @@ app.post('/submit-funnel', async (req, res) => {
                 success: true,
                 message: `Demande de devis enregistrée avec succès pour ${contactInfo.email} mais les véhicules n'ont pas pu être enregistrés`,
                 reference: reference,
+            accessKey: accessKey,
                 airtableStatus: 'Entrée principale créée, véhicules non créés (ID manquant)'
               });
             }
@@ -1688,6 +1755,7 @@ app.post('/submit-funnel', async (req, res) => {
               success: true,
               message: `Demande de devis enregistrée avec succès pour ${contactInfo.email}`,
               reference: reference,
+            accessKey: accessKey,
               airtableStatus: 'Entrée complète créée',
               vehicleResults: vehicleResults
             });
@@ -1697,6 +1765,7 @@ app.post('/submit-funnel', async (req, res) => {
               success: true,
               message: `Demande de devis enregistrée avec succès pour ${contactInfo.email}`,
               reference: reference,
+            accessKey: accessKey,
               airtableStatus: 'Entrée complète créée (pas de véhicules)'
             });
           }
@@ -1714,6 +1783,7 @@ app.post('/submit-funnel', async (req, res) => {
             message: `Demande de devis partiellement enregistrée pour ${contactInfo.email}`,
             error: fullRecordError.message,
             reference: reference,
+            accessKey: accessKey,
             airtableStatus: 'Entrée de base créée, données complètes échouées'
           });
         }
@@ -1760,6 +1830,7 @@ app.post('/submit-funnel', async (req, res) => {
       success: true,
       message: `Demande de devis enregistrée avec succès pour ${contactInfo.email}`,
       reference: reference,
+            accessKey: accessKey,
       airtableStatus: 'Voir les logs pour détails sur le statut d\'Airtable'
     });
     
@@ -1778,8 +1849,10 @@ app.get('/request/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
-    if (!id) {
-      return res.status(400).json({ error: 'ID ou référence manquant' });
+    // Référence DM-xxxxxx-xxx ou identifiant Airtable rec..., rien d'autre :
+    // l'id est injecté dans une formule Airtable
+    if (!id || !/^(DM-\d{6}-\d{3}|rec[A-Za-z0-9]{14})$/.test(id)) {
+      return res.status(404).json({ error: 'Demande non trouvée' });
     }
     
     // Valider que l'API key et l'ID de base Airtable sont configurés
@@ -1886,6 +1959,19 @@ app.get('/request/:id', async (req, res) => {
       comment: record.fields['attached_note'] || '',
     };
     
+    // Sans la clé du lien de confirmation, aucune donnée personnelle
+    const reference = record.fields['reference'] || '';
+    if (!isValidAccessKey(reference, req.query.k)) {
+      requestDetails.firstName = '';
+      requestDetails.lastName = '';
+      requestDetails.email = '';
+      requestDetails.phoneNumber = '';
+      requestDetails.departureAddress.street = '';
+      requestDetails.arrivalAddress.street = '';
+      requestDetails.comment = '';
+      requestDetails.vehicles = requestDetails.vehicles.map(v => ({ ...v, registration: '' }));
+    }
+    
     res.json(requestDetails);
   } catch (error) {
     console.error('Erreur lors de la récupération des détails de la demande:', error);
@@ -1918,7 +2004,6 @@ const submissionInProgress = new Map();
 // Route pour soumettre une annonce DodoPartage
 app.post('/api/partage/submit-announcement', async (req, res) => {
   console.log('POST /api/partage/submit-announcement appelé');
-  console.log('Body reçu:', JSON.stringify(req.body, null, 2));
   
   try {
     const data = req.body;
@@ -2740,7 +2825,6 @@ async function createAutomaticAlert(alertCriteria, email, options = {}) {
 // Route pour soumettre une demande de recherche de place DodoPartage
 app.post('/api/partage/submit-search-request', async (req, res) => {
   console.log('POST /api/partage/submit-search-request appelé');
-  console.log('Body reçu:', JSON.stringify(req.body, null, 2));
   
   try {
     const data = req.body;
@@ -5317,7 +5401,6 @@ app.post('/api/partage/add-missing-tokens', async (req, res) => {
 // Route pour créer une alerte email
 app.post('/api/partage/create-alert', async (req, res) => {
   console.log('POST /api/partage/create-alert appelé');
-  console.log('Body reçu:', req.body);
   
   try {
     const { type, departure, arrival, volume_min, email } = req.body;
@@ -5537,7 +5620,6 @@ app.post('/api/partage/create-alert', async (req, res) => {
 // Route pour supprimer une alerte (avec collecte de raison)
 app.post('/api/partage/delete-alert', async (req, res) => {
   console.log('POST /api/partage/delete-alert appelé');
-  console.log('Body reçu:', req.body);
   
   try {
     const { token, reason, customReason } = req.body;
