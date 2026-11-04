@@ -273,6 +273,28 @@ Airtable.configure({
 const base = Airtable.base(process.env.AIRTABLE_BASE_ID);
 console.log('Airtable configuré:', !!process.env.AIRTABLE_API_KEY && !!process.env.AIRTABLE_BASE_ID);
 
+// Circuit partenaires : envoi des demandes et déblocage (lot 2)
+const { createLeadDispatch } = require('./lead-dispatch');
+const leadDispatch = createLeadDispatch({ base, resend });
+app.use('/api/unlock', leadDispatch.router);
+
+// Une demande qu'Airtable a refusée part par email à Pierre pour ne pas être perdue
+async function backupLostRequest(reference, payload, reason) {
+  try {
+    const { error } = await resend.emails.send({
+      from: 'Dodomove <hello@dodomove.fr>',
+      to: process.env.LEAD_ALERT_EMAIL || 'bost.analytics@gmail.com',
+      subject: `[Dodomove] Demande non enregistrée dans Airtable : ${reference}`,
+      text: `Airtable a refusé la demande ${reference} (${reason}).\nÀ ressaisir à la main :\n\n${JSON.stringify(payload, null, 2)}`,
+    });
+    if (error) throw new Error(error.message || JSON.stringify(error));
+    return true;
+  } catch (error) {
+    console.error(`Sauvegarde par email impossible pour ${reference}:`, error.message);
+    return false;
+  }
+}
+
 // ========================================
 // FONCTIONS HELPER GLOBALES
 // ========================================
@@ -1569,6 +1591,13 @@ app.post('/submit-funnel', async (req, res) => {
           
           console.log('🎉 SUCCÈS: Données complètes enregistrées dans Airtable!');
           console.log('ID du nouvel enregistrement complet:', completeRecord ? JSON.stringify(completeRecord) : 'Non disponible');
+
+          // Envoi aux partenaires après la réponse au particulier
+          const startDispatch = () => {
+            const recordId = completeRecord && completeRecord[0] && completeRecord[0].id;
+            if (!recordId) return;
+            setImmediate(() => leadDispatch.dispatchRequest(recordId, fields, vehicleDetails || []));
+          };
           
           // Si des véhicules sont présents, les enregistrer dans la table véhicules avec son ID spécifique
           if (vehicleDetails && vehicleDetails.length > 0) {
@@ -1598,6 +1627,7 @@ app.post('/submit-funnel', async (req, res) => {
               console.warn("⚠️ Impossible de créer des véhicules sans ID de demande valide pour la relation");
               console.error('Structure completeRecord invalide ou inattendue:', JSON.stringify(completeRecord));
               // Retourner ici pour éviter de traiter les véhicules sans ID valide
+              startDispatch();
               return res.status(200).json({ 
                 success: true,
                 message: `Demande de devis enregistrée avec succès pour ${contactInfo.email} mais les véhicules n'ont pas pu être enregistrés`,
@@ -1751,6 +1781,7 @@ app.post('/submit-funnel', async (req, res) => {
             console.log('Résumé des véhicules:', JSON.stringify(vehicleResults));
             
             // Répondre avec le statut final incluant les résultats des véhicules
+            startDispatch();
             return res.status(200).json({ 
               success: true,
               message: `Demande de devis enregistrée avec succès pour ${contactInfo.email}`,
@@ -1761,6 +1792,7 @@ app.post('/submit-funnel', async (req, res) => {
             });
           } else {
             // Si pas de véhicules, répondre directement
+            startDispatch();
             return res.status(200).json({ 
               success: true,
               message: `Demande de devis enregistrée avec succès pour ${contactInfo.email}`,
@@ -1776,15 +1808,18 @@ app.post('/submit-funnel', async (req, res) => {
             console.error('Détails de l\'erreur:', JSON.stringify(fullRecordError.error));
           }
           
-          // Nous avons au moins enregistré les données simplifiées, donc on considère ça comme un succès partiel
+          // Rien n'est enregistré : la demande part par email à Pierre, sinon on prévient le particulier
+          const savedByEmail = await backupLostRequest(reference, req.body, fullRecordError.message);
+          if (!savedByEmail) {
+            return res.status(500).json({ success: false, error: 'Votre demande n\'a pas pu être enregistrée. Merci de réessayer dans quelques minutes.', reference });
+          }
           return res.status(200).json({ 
             success: true,
             warning: true,
-            message: `Demande de devis partiellement enregistrée pour ${contactInfo.email}`,
-            error: fullRecordError.message,
+            message: `Demande de devis transmise pour ${contactInfo.email}`,
             reference: reference,
             accessKey: accessKey,
-            airtableStatus: 'Entrée de base créée, données complètes échouées'
+            airtableStatus: 'Airtable en échec, demande sauvegardée par email'
           });
         }
       } catch (testError) {
@@ -1825,7 +1860,11 @@ app.post('/submit-funnel', async (req, res) => {
       console.error('ERREUR DE CONFIGURATION AIRTABLE:', airtableSetupError);
     }
     
-    // Répondre avec succès même si Airtable a échoué (pour ne pas bloquer l'utilisateur)
+    // Airtable injoignable : la demande part par email à Pierre, sinon on prévient le particulier
+    const savedByEmail = await backupLostRequest(reference, req.body, 'connexion Airtable impossible');
+    if (!savedByEmail) {
+      return res.status(500).json({ success: false, error: 'Votre demande n\'a pas pu être enregistrée. Merci de réessayer dans quelques minutes.', reference });
+    }
     res.status(200).json({ 
       success: true,
       message: `Demande de devis enregistrée avec succès pour ${contactInfo.email}`,
