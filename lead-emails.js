@@ -34,6 +34,11 @@ function layout({ preheader, title, body }) {
 </body></html>`;
 }
 
+// Salutation au prénom du contact (fiche partenaire), jamais au nom de l'entreprise
+function greeting(firstName) {
+  return firstName ? `Bonjour ${escapeHtml(firstName)},` : 'Bonjour,';
+}
+
 function button(href, label) {
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:20px 0;"><tr><td style="background:${CORAL};border-radius:6px;">
 <a href="${escapeHtml(href)}" style="display:inline-block;padding:13px 22px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;">${escapeHtml(label)}</a>
@@ -70,11 +75,11 @@ function priceLine(offer) {
 }
 
 // 1. Au partenaire : nouvelle demande, sans coordonnées
-function newRequestEmail({ partnerName, summary, offer, recipientsCount, unlockUrl, expiresLabel }) {
+function newRequestEmail({ contactFirstName, summary, offer, recipientsCount, unlockUrl, expiresLabel }) {
   const others = recipientsCount > 1
     ? `Cette demande a été transmise à ${recipientsCount} professionnels, vous compris.`
     : 'Vous êtes le seul professionnel à recevoir cette demande.';
-  const body = `<p>Bonjour ${escapeHtml(partnerName)},</p>
+  const body = `<p>${greeting(contactFirstName)}</p>
 <p>Un particulier cherche un transporteur pour le projet ci-dessous. Ses coordonnées s'affichent quand vous débloquez la demande.</p>
 ${summaryRows(summary)}
 <p>${priceLine(offer)}</p>
@@ -88,11 +93,11 @@ ${button(unlockUrl, 'Débloquer cette demande')}
 }
 
 // 2. Au partenaire : demande débloquée, coordonnées complètes (sa preuve)
-function unlockedEmail({ partnerName, summary, contact, offer, reference, unlockUrl }) {
+function unlockedEmail({ contactFirstName, summary, contact, offer, reference, unlockUrl }) {
   const billing = offer.free
     ? 'Demande offerte, non facturée.'
     : `${formatEuros(offer.amount)} sur votre facture mensuelle.`;
-  const body = `<p>Bonjour ${escapeHtml(partnerName)},</p>
+  const body = `<p>${greeting(contactFirstName)}</p>
 <p>Vous avez débloqué la demande ${escapeHtml(reference)}. Merci de contacter ce particulier sous 24 heures ouvrées.</p>
 ${rows([
     ['Nom', contact.name],
@@ -104,7 +109,7 @@ ${rows([
   ])}
 ${summaryRows(summary)}
 <p>${escapeHtml(billing)}</p>
-<p style="font-size:13px;color:#777777;">Doublon ou demande invalide ? Répondez à cet email sous 72 heures : elle ne vous sera pas facturée. Vous pouvez revoir la demande ici : <a href="${escapeHtml(unlockUrl)}" style="color:${NAVY};">${escapeHtml(unlockUrl)}</a></p>`;
+<p style="font-size:13px;color:#777777;">Vous pouvez revoir la demande ici : <a href="${escapeHtml(unlockUrl)}" style="color:${NAVY};">${escapeHtml(unlockUrl)}</a></p>`;
   return {
     subject: `Demande débloquée ${reference} : ${contact.name}`,
     html: layout({ preheader: `${contact.name}, ${contact.phone}`, title: 'Demande débloquée', body }),

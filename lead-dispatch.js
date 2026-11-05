@@ -248,7 +248,7 @@ function createLeadDispatch({ base, resend }) {
         } }], { typecast: true });
         try {
           await sendEmail(partner.fields.email, emails.newRequestEmail({
-            partnerName: partner.fields.nom || '',
+            contactFirstName: partner.fields.prenom_contact || '',
             summary,
             offer,
             recipientsCount: chosen.length,
@@ -308,6 +308,7 @@ function createLeadDispatch({ base, resend }) {
     return {
       reference: d.reference,
       partnerName: partner.fields.nom || '',
+      contactFirstName: partner.fields.prenom_contact || '',
       summary: buildSummary(request.fields, vehicles),
       offer: { free: offer.free, freeRemaining: offer.freeRemaining, amount: offer.amount, categoryLabel: offer.categoryLabel },
       recipientsCount: d.destinataires || 1,
@@ -391,7 +392,7 @@ function createLeadDispatch({ base, resend }) {
       const offer = { ...view.offer, freeRemaining: view.offer.free ? view.offer.freeRemaining - 1 : view.offer.freeRemaining };
       await Promise.allSettled([
         sendEmail(view.partner.fields.email, emails.unlockedEmail({
-          partnerName: view.partnerName, summary: view.summary, contact, offer, reference: view.reference, unlockUrl,
+          contactFirstName: view.contactFirstName, summary: view.summary, contact, offer, reference: view.reference, unlockUrl,
         }), { reply_to: ALERT_EMAIL }),
         contact.email && sendEmail(contact.email, emails.customerNotifiedEmail({
           firstName: contact.firstName, partnerName: view.partnerName, summary: view.summary,
