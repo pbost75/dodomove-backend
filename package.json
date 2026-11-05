@@ -4,6 +4,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "bilan": "node scripts/bilan-mensuel.js",
     "dev": "nodemon server.js",
     "railway": "NODE_ENV=production node server.js"
   },
