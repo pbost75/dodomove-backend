@@ -98,7 +98,7 @@ function unlockedEmail({ contactFirstName, summary, contact, offer, reference, u
     ? 'Demande offerte, non facturée.'
     : `${formatEuros(offer.amount)} sur votre facture mensuelle.`;
   const body = `<p>${greeting(contactFirstName)}</p>
-<p>Vous avez débloqué la demande ${escapeHtml(reference)}. Merci de contacter ce particulier sous 24 heures ouvrées.</p>
+<p>Vous avez débloqué la demande ${escapeHtml(reference)}. Merci de contacter ce particulier sous 24 heures ouvrées, en vous présentant de la part de Dodomove et en citant cette référence : nous la lui avons annoncée.</p>
 ${rows([
     ['Nom', contact.name],
     ['Téléphone', contact.phone],
@@ -116,18 +116,87 @@ ${summaryRows(summary)}
   };
 }
 
-// 3. Au particulier : un transporteur va le contacter (décision D13)
-function customerNotifiedEmail({ firstName, partnerName, summary }) {
+// Emails au particulier. Ton : site-web/emails/TON.md côté Pierre (rassurant, concret, vouvoiement)
+
+function steps(items) {
+  const lines = items.map((text, i) => `<tr><td style="padding:6px 12px 6px 0;vertical-align:top;"><span style="display:inline-block;width:24px;height:24px;line-height:24px;border-radius:12px;background:#FDECE9;color:${CORAL};font-weight:bold;font-size:13px;text-align:center;">${i + 1}</span></td><td style="padding:6px 0;color:#333333;">${text}</td></tr>`).join('');
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;margin:8px 0 4px 0;">${lines}</table>`;
+}
+
+function subtitle(text) {
+  return `<p style="font-family:Georgia,'Roboto Slab',serif;font-size:17px;font-weight:bold;color:${NAVY};margin:24px 0 4px 0;">${escapeHtml(text)}</p>`;
+}
+
+function requestRows(summary, reference) {
+  return rows([
+    ['Trajet', summary.routeShort],
+    ['Date', summary.date],
+    ['Volume', summary.volume],
+    ['Véhicules', summary.vehicles],
+    ['Référence', reference],
+  ]);
+}
+
+function carriersLabel(count) {
+  return count > 1 ? `${count} transporteurs` : 'un transporteur';
+}
+
+// 3. Au particulier, dès l'envoi aux transporteurs : demande reçue et transmise
+function requestSentEmail({ firstName, summary, reference, carriersCount, requestUrl }) {
   const body = `<p>Bonjour ${escapeHtml(firstName)},</p>
-<p><strong>${escapeHtml(partnerName)}</strong> a pris connaissance de votre projet ${escapeHtml(summary.routeShort)} et va vous contacter par téléphone ou par email pour vous proposer un devis.</p>
-<p>Pensez à répondre aux numéros que vous ne connaissez pas ces prochains jours.</p>`;
+<p>Votre demande de devis ${escapeHtml(summary.routeShort)} est bien enregistrée. Nous venons de la transmettre à <strong>${carriersLabel(carriersCount)}</strong> qui couvre${carriersCount > 1 ? 'nt' : ''} votre trajet. Jamais plus de trois : vous ne serez pas submergé d'appels.</p>
+${subtitle('Ce qui va se passer')}
+${steps([
+    'Chaque transporteur étudie votre projet. Dès que l\'un d\'eux s\'engage à vous faire un devis, nous vous envoyons son nom par email.',
+    `Il vous contacte par téléphone ou par email dans les trois jours, en citant votre demande Dodomove ${escapeHtml(reference)}.`,
+    'Vous comparez les devis et choisissez librement. Notre service est gratuit et sans engagement.',
+  ])}
+${subtitle('En attendant')}
+<p style="margin:4px 0;">Décrochez aux numéros que vous ne connaissez pas ces prochains jours : l'appel peut venir de métropole comme d'outre-mer. Sans nouvelles, jetez un œil à vos courriers indésirables.</p>
+${requestRows(summary, reference)}
+${button(requestUrl, 'Suivre ma demande')}
+<p style="font-size:13px;color:#777777;">Une question, une erreur dans votre demande ? Répondez simplement à cet email.</p>`;
   return {
-    subject: `${partnerName} va vous contacter pour votre devis`,
-    html: layout({ preheader: `${partnerName} va vous contacter`, title: 'Un transporteur va vous contacter', body }),
+    subject: `Votre demande de devis ${summary.routeShort} est transmise`,
+    html: layout({ preheader: `${carriersLabel(carriersCount)} vous contacte${carriersCount > 1 ? 'nt' : ''} dans les trois jours, jamais plus de trois.`, title: 'Votre demande est transmise', body }),
   };
 }
 
-// 4. Interne : aucun partenaire éligible, ou envoi en échec
+// 4. Au particulier, à chaque déblocage : un transporteur va le contacter (décision D13)
+function customerNotifiedEmail({ firstName, partnerName, summary, reference, requestUrl }) {
+  const body = `<p>Bonjour ${escapeHtml(firstName)},</p>
+<p><strong>${escapeHtml(partnerName)}</strong> a étudié votre projet ${escapeHtml(summary.routeShort)} et va vous contacter pour vous proposer un devis, par téléphone ou par email, dans les prochaines 24 heures ouvrées.</p>
+<p>Pour le reconnaître : il se présentera de la part de Dodomove et citera votre demande ${escapeHtml(reference)}.</p>
+${subtitle('Pour comparer les devis')}
+<p style="margin:4px 0 8px 0;">Demandez à chaque transporteur, pour pouvoir comparer :</p>
+${steps([
+    'le volume qu\'il a retenu, et comment il l\'a estimé ;',
+    'livraison jusqu\'à votre porte ou retrait au port ;',
+    'ce que couvre l\'assurance, et pour quelle valeur ;',
+    'ce qui n\'est pas compris : taxes à l\'arrivée, stockage, frais d\'attente au chargement.',
+  ])}
+${button(requestUrl, 'Suivre ma demande')}
+<p style="font-size:13px;color:#777777;">Pas de nouvelles de ${escapeHtml(partnerName)} d'ici deux jours ouvrés ? Répondez à cet email, nous nous en occupons.</p>`;
+  return {
+    subject: `${partnerName} va vous contacter pour votre devis`,
+    html: layout({ preheader: `Il citera votre demande Dodomove ${reference}.`, title: 'Un transporteur va vous contacter', body }),
+  };
+}
+
+// 5. Au particulier : aucun transporteur partenaire sur ce trajet pour l'instant
+function noCarrierEmail({ firstName, summary, reference }) {
+  const body = `<p>Bonjour ${escapeHtml(firstName)},</p>
+<p>Merci pour votre demande de devis ${escapeHtml(summary.routeShort)}. Nous préférons vous le dire tout de suite : aucun de nos transporteurs partenaires ne couvre encore ce trajet ou ces prestations. Votre demande n'a donc été transmise à personne, et personne ne vous appellera de notre part.</p>
+<p>Nous la gardons de côté : si un transporteur vérifié couvre bientôt votre trajet, nous vous écrirons avant de la lui transmettre.</p>
+${requestRows(summary, reference)}
+<p style="font-size:13px;color:#777777;">Vous préférez que nous supprimions votre demande ? Répondez simplement à cet email.</p>`;
+  return {
+    subject: `Votre demande ${summary.routeShort} : pas encore de transporteur sur ce trajet`,
+    html: layout({ preheader: 'Votre demande n\'a été transmise à personne. Nous vous expliquons.', title: 'Pas encore de transporteur sur ce trajet', body }),
+  };
+}
+
+// 6. Interne : aucun partenaire éligible, ou envoi en échec
 function adminAlertEmail({ title, reference, details }) {
   const body = `<p>Demande ${escapeHtml(reference)}.</p><p>${escapeHtml(details)}</p>`;
   return {
@@ -140,6 +209,8 @@ module.exports = {
   escapeHtml,
   newRequestEmail,
   unlockedEmail,
+  requestSentEmail,
   customerNotifiedEmail,
+  noCarrierEmail,
   adminAlertEmail,
 };

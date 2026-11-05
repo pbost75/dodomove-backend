@@ -275,7 +275,7 @@ console.log('Airtable configuré:', !!process.env.AIRTABLE_API_KEY && !!process.
 
 // Circuit partenaires : envoi des demandes et déblocage (lot 2)
 const { createLeadDispatch } = require('./lead-dispatch');
-const leadDispatch = createLeadDispatch({ base, resend });
+const leadDispatch = createLeadDispatch({ base, resend, requestAccessKey });
 app.use('/api/unlock', leadDispatch.router);
 
 // Une demande qu'Airtable a refusée part par email à Pierre pour ne pas être perdue
@@ -1987,7 +1987,7 @@ app.get('/request/:id', async (req, res) => {
       taxExemption: record.fields['tax_exemption_eligible'] === true ? 'Oui' : 'Non',
       
       hasPersonalEffects: record.fields['has_personal_belongings'] === true,
-      estimatedVolume: record.fields['calculatedVolume'] || record.fields['userEstimatedVolume'] || 0,
+      estimatedVolume: record.fields['calculatedVolumeFromCalculator'] || record.fields['userEstimatedVolume'] || record.fields['calculatedVolume'] || 0,
       personalEffectsDescription: record.fields['itemDetails_description'] || '',
       imageUrl: '', // Ce champ n'existe pas encore dans Airtable
       
@@ -2011,6 +2011,19 @@ app.get('/request/:id', async (req, res) => {
       requestDetails.vehicles = requestDetails.vehicles.map(v => ({ ...v, registration: '' }));
     }
     
+    // Transporteurs sollicités et ceux qui ont pris la demande (sans leurs noms)
+    try {
+      const sends = await base(process.env.AIRTABLE_DISPATCH_TABLE || 'Envois').select({
+        filterByFormula: `{demande_id} = '${record.id}'`,
+        fields: ['statut'],
+      }).all();
+      requestDetails.carriersCount = sends.filter(r => r.fields.statut !== "Échec d'envoi").length;
+      requestDetails.carriersEngaged = sends.filter(r => r.fields.statut === 'Débloqué').length;
+    } catch (error) {
+      requestDetails.carriersCount = 0;
+      requestDetails.carriersEngaged = 0;
+    }
+
     res.json(requestDetails);
   } catch (error) {
     console.error('Erreur lors de la récupération des détails de la demande:', error);
@@ -2026,6 +2039,7 @@ function mapAirtableStatusToApi(airtableStatus) {
     'In Progress': 'verification',
     'Verified': 'transmise',
     'Transmitted': 'transmise',
+    'Sans partenaire': 'sans-transporteur',
     'Quotes Sent': 'choix',
     'Completed': 'complete'
   };

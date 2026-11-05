@@ -167,7 +167,23 @@ function expiresLabel(date) {
   return date.toLocaleString('fr-FR', { timeZone: 'Europe/Paris', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) + ' (heure de Paris)';
 }
 
-function createLeadDispatch({ base, resend }) {
+function createLeadDispatch({ base, resend, requestAccessKey = () => null }) {
+  // Lien vers la page de suivi, avec la clé qui affiche les coordonnées du particulier
+  function requestUrl(reference) {
+    const key = requestAccessKey(reference);
+    return `${FUNNEL_URL}/confirmation/${encodeURIComponent(reference)}${key ? `?k=${key}` : ''}`;
+  }
+
+  // Emails au particulier : jamais bloquants pour le reste du circuit
+  async function emailCustomer(fields, template) {
+    if (!fields.contact_email) return;
+    try {
+      await sendEmail(fields.contact_email, template, { reply_to: ALERT_EMAIL });
+    } catch (error) {
+      console.error(`Email au particulier non envoyé (${fields.reference}):`, error.message);
+    }
+  }
+
   async function sendEmail(to, { subject, html }, extra = {}) {
     const { error } = await resend.emails.send({ from: SENDER, to, subject, html, ...extra });
     if (error) throw new Error(`Resend: ${error.message || JSON.stringify(error)}`);
@@ -211,8 +227,10 @@ function createLeadDispatch({ base, resend }) {
 
       if (eligible.length === 0) {
         await base(REQUESTS_TABLE).update(recordId, { status: 'Sans partenaire' }, { typecast: true });
+        const summary = buildSummary(fields, vehicles);
         await alertAdmin('Aucun partenaire disponible', reference,
-          `Trajet ${buildSummary(fields, vehicles).routeShort}, prestations : ${requestServices(fields).join(', ') || 'non précisées'}. La demande n'a été envoyée à personne.`);
+          `Trajet ${summary.routeShort}, prestations : ${requestServices(fields).join(', ') || 'non précisées'}. La demande n'a été envoyée à personne. Le particulier en a été prévenu par email.`);
+        await emailCustomer(fields, emails.noCarrierEmail({ firstName: fields.contact_first_name || '', summary, reference }));
         return { sent: 0 };
       }
 
@@ -263,6 +281,11 @@ function createLeadDispatch({ base, resend }) {
       }
 
       await base(REQUESTS_TABLE).update(recordId, { status: 'Transmitted' }, { typecast: true });
+      if (sent > 0) {
+        await emailCustomer(fields, emails.requestSentEmail({
+          firstName: fields.contact_first_name || '', summary, reference, carriersCount: sent, requestUrl: requestUrl(reference),
+        }));
+      }
       return { sent };
     } catch (error) {
       console.error(`Envoi aux partenaires en échec pour ${reference}:`, error.message);
@@ -396,7 +419,8 @@ function createLeadDispatch({ base, resend }) {
         }), { reply_to: ALERT_EMAIL }),
         contact.email && sendEmail(contact.email, emails.customerNotifiedEmail({
           firstName: contact.firstName, partnerName: view.partnerName, summary: view.summary,
-        })),
+          reference: view.reference, requestUrl: requestUrl(view.reference),
+        }), { reply_to: ALERT_EMAIL }),
       ]).then(results => results.forEach(r => r.status === 'rejected' && console.error('Email après déblocage:', r.reason?.message)));
 
       res.json(publicView({ ...view, unlocked: true, unlockedAt: now.toISOString(), offer, contact }));
